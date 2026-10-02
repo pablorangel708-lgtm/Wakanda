@@ -1,0 +1,1367 @@
+--[[
+	WAKANDA - LocalScript (otimizado para celular)
+	Coloque em StarterPlayer > StarterPlayerScripts.
+	Constroi automaticamente uma grande Wakanda ao redor de (1170, 0, 432).
+	Textura usada (somente esta): rbxassetid://33384188
+]]
+
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+
+local CENTER = Vector3.new(1170, 0, 432)
+local MAP_TEXTURE = "rbxassetid://33384188"
+
+local CONFIG = {
+	BatchSize = 150,       -- partes criadas antes de ceder o frame
+	MaxLights = 40,        -- limite de PointLights (leve para celular)
+	ApplyLighting = true,  -- iluminacao de fim de tarde com neon destacado
+	TeleportPlayer = false,-- true = leva o jogador para a frente do palacio
+	Seed = 1970,
+}
+
+local PI = math.pi
+local rng = Random.new(CONFIG.Seed)
+local partCount, lightCount, streetLightCount, emitterCount = 0, 0, 0, 0
+
+------------------------------------------------------------------
+-- CORES
+------------------------------------------------------------------
+local C = {
+	Ground = Color3.fromRGB(58, 104, 52),
+	GroundDark = Color3.fromRGB(44, 82, 46),
+	City = Color3.fromRGB(126, 110, 92),
+	Road = Color3.fromRGB(32, 34, 40),
+	Sidewalk = Color3.fromRGB(168, 156, 136),
+	Line = Color3.fromRGB(255, 205, 90),
+	DarkMetal = Color3.fromRGB(32, 30, 44),
+	Metal = Color3.fromRGB(62, 60, 80),
+	Black = Color3.fromRGB(24, 24, 32),
+	Stone = Color3.fromRGB(112, 102, 90),
+	Sand = Color3.fromRGB(196, 150, 100),
+	Terracotta = Color3.fromRGB(176, 108, 70),
+	Gold = Color3.fromRGB(226, 172, 60),
+	Vib = Color3.fromRGB(150, 70, 255),
+	VibLight = Color3.fromRGB(205, 150, 255),
+	Cyan = Color3.fromRGB(80, 220, 255),
+	Water = Color3.fromRGB(50, 150, 215),
+	Foam = Color3.fromRGB(228, 246, 255),
+	Snow = Color3.fromRGB(240, 244, 250),
+	Trunk = Color3.fromRGB(96, 70, 48),
+	Warm = Color3.fromRGB(255, 232, 180),
+}
+
+local LEAVES = {
+	Color3.fromRGB(52, 120, 56), Color3.fromRGB(72, 142, 60),
+	Color3.fromRGB(40, 100, 70), Color3.fromRGB(98, 152, 52),
+}
+local ROCKS = {
+	Color3.fromRGB(96, 92, 88), Color3.fromRGB(80, 84, 78),
+	Color3.fromRGB(110, 98, 84), Color3.fromRGB(70, 74, 82),
+}
+local BUILD_COLORS = {
+	Color3.fromRGB(34, 36, 50), Color3.fromRGB(44, 40, 60),
+	Color3.fromRGB(30, 44, 54), Color3.fromRGB(52, 48, 44),
+}
+local ACCENTS = { C.Vib, C.Cyan, C.Gold, Color3.fromRGB(255, 120, 70) }
+local HOUSE_COLORS = {
+	C.Sand, C.Terracotta, Color3.fromRGB(214, 180, 130), Color3.fromRGB(150, 110, 84),
+}
+local FLOWERS = {
+	Color3.fromRGB(255, 140, 60), Color3.fromRGB(200, 90, 255),
+	Color3.fromRGB(255, 240, 240), Color3.fromRGB(255, 200, 40),
+}
+
+------------------------------------------------------------------
+-- UTILIDADES BASICAS
+------------------------------------------------------------------
+local function toCF(rel)
+	if typeof(rel) == "Vector3" then
+		return CFrame.new(CENTER + rel)
+	end
+	return CFrame.new(CENTER) * rel
+end
+
+local function toLocalCF(rel)
+	if typeof(rel) == "Vector3" then
+		return CFrame.new(rel)
+	end
+	return rel
+end
+
+local function throttle()
+	partCount = partCount + 1
+	if partCount % CONFIG.BatchSize == 0 then
+		task.wait()
+	end
+end
+
+local function withShape(opts, shape)
+	local o = {}
+	if opts then
+		for k, v in pairs(opts) do
+			o[k] = v
+		end
+	end
+	o.Shape = shape
+	return o
+end
+
+local function make(parent, size, rel, color, material, opts)
+	opts = opts or {}
+	local p = Instance.new(opts.Class or "Part")
+	p.Anchored = true
+	p.Size = size
+	p.CFrame = toCF(rel)
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Transparency = opts.Transparency or 0
+	p.Reflectance = opts.Reflectance or 0
+	p.CanCollide = opts.CanCollide ~= false
+	p.CastShadow = opts.Shadow == true
+	p.Name = opts.Name or "Part"
+	if opts.Shape then
+		p.Shape = opts.Shape
+	end
+	p.Parent = parent
+	throttle()
+	return p
+end
+
+-- cilindro vertical (altura, diametro)
+local function cyl(parent, height, diameter, rel, color, material, opts)
+	return make(parent, Vector3.new(height, diameter, diameter),
+		toLocalCF(rel) * CFrame.Angles(0, 0, PI / 2), color, material,
+		withShape(opts, Enum.PartType.Cylinder))
+end
+
+local function ball(parent, size, rel, color, material, opts)
+	return make(parent, size, rel, color, material, withShape(opts, Enum.PartType.Ball))
+end
+
+local function wedge(parent, size, rel, color, material, opts)
+	local o = withShape(opts, nil)
+	o.Class = "WedgePart"
+	return make(parent, size, rel, color, material, o)
+end
+
+local function folder(parent, name)
+	local f = Instance.new("Folder")
+	f.Name = name
+	f.Parent = parent
+	return f
+end
+
+local function addLight(part, color, range, brightness, bypass)
+	if not bypass then
+		if lightCount >= CONFIG.MaxLights then
+			return
+		end
+		lightCount = lightCount + 1
+	end
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Range = range
+	l.Brightness = brightness or 1
+	l.Shadows = false
+	l.Parent = part
+end
+
+local function addMap(part, face, tint)
+	local d = Instance.new("Decal")
+	d.Texture = MAP_TEXTURE
+	d.Face = face
+	if tint then
+		d.Color3 = tint
+	end
+	d.Parent = part
+	return d
+end
+
+local function addLabel(part, face, text, color)
+	local g = Instance.new("SurfaceGui")
+	g.Face = face
+	g.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	g.PixelsPerStud = 24
+	g.Parent = part
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Text = text
+	t.TextScaled = true
+	t.Font = Enum.Font.GothamBold
+	t.TextColor3 = color or C.Gold
+	t.Parent = g
+end
+
+local function V(x, y, z)
+	return Vector3.new(x, y, z)
+end
+
+------------------------------------------------------------------
+-- REGISTROS ESPACIAIS (evita sobreposicao)
+------------------------------------------------------------------
+local roadSegs, riverSegs, circles = {}, {}, {}
+local hills, innerMountains = {}, {}
+
+local function distSeg(px, pz, ax, az, bx, bz)
+	local dx, dz = bx - ax, bz - az
+	local l2 = dx * dx + dz * dz
+	local t = 0
+	if l2 > 0 then
+		t = math.clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1)
+	end
+	local cx, cz = ax + t * dx, az + t * dz
+	return math.sqrt((px - cx) ^ 2 + (pz - cz) ^ 2)
+end
+
+local function reserve(x, z, r)
+	circles[#circles + 1] = { x = x, z = z, r = r }
+end
+
+local function blocked(x, z, pad, allowRiver)
+	for _, s in ipairs(roadSegs) do
+		if distSeg(x, z, s.ax, s.az, s.bx, s.bz) < s.w / 2 + pad + 4 then
+			return true
+		end
+	end
+	if not allowRiver then
+		for _, s in ipairs(riverSegs) do
+			if distSeg(x, z, s.ax, s.az, s.bx, s.bz) < s.w / 2 + pad + 6 then
+				return true
+			end
+		end
+	end
+	for _, c in ipairs(circles) do
+		if math.sqrt((x - c.x) ^ 2 + (z - c.z) ^ 2) < c.r + pad then
+			return true
+		end
+	end
+	return false
+end
+
+local function groundY(x, z)
+	if math.sqrt(x * x + z * z) < 415 then
+		return 0.3
+	end
+	return 0
+end
+
+------------------------------------------------------------------
+-- VEGETACAO
+------------------------------------------------------------------
+local function createTree(parent, pos, scale, kind)
+	scale = scale or 1
+	kind = kind or rng:NextInteger(1, 3)
+	local leaf = LEAVES[rng:NextInteger(1, #LEAVES)]
+	local th = (9 + rng:NextNumber(0, 5)) * scale
+	if kind == 1 then -- acacia (copa achatada)
+		cyl(parent, th, 1.6 * scale, pos + V(0, th / 2, 0), C.Trunk, Enum.Material.Wood, { Name = "Tronco" })
+		ball(parent, V(22, 6, 22) * scale, pos + V(0, th + 1, 0), leaf, Enum.Material.Grass,
+			{ CanCollide = false, Name = "Copa" })
+	elseif kind == 2 then -- arvore redonda
+		cyl(parent, th * 0.8, 1.4 * scale, pos + V(0, th * 0.4, 0), C.Trunk, Enum.Material.Wood, { Name = "Tronco" })
+		ball(parent, V(13, 13, 13) * scale, pos + V(0, th * 0.8 + 5 * scale, 0), leaf, Enum.Material.Grass,
+			{ CanCollide = false, Name = "Copa" })
+	else -- baobab
+		cyl(parent, th * 0.9, 4 * scale, pos + V(0, th * 0.45, 0), Color3.fromRGB(120, 92, 70),
+			Enum.Material.Wood, { Name = "Tronco" })
+		ball(parent, V(18, 8, 18) * scale, pos + V(0, th * 0.9 + 2, 0), leaf, Enum.Material.Grass,
+			{ CanCollide = false, Name = "Copa" })
+	end
+end
+
+local function createBush(parent, pos, s)
+	s = s or 1
+	local leaf = LEAVES[rng:NextInteger(1, #LEAVES)]
+	ball(parent, V(5 * s, 3 * s, 5 * s), pos + V(0, 1.2 * s, 0), leaf, Enum.Material.Grass,
+		{ CanCollide = false, Name = "Arbusto" })
+	if rng:NextNumber() < 0.4 then
+		ball(parent, V(0.9, 0.9, 0.9), pos + V(rng:NextNumber(-1, 1), 2.6 * s, rng:NextNumber(-1, 1)),
+			FLOWERS[rng:NextInteger(1, #FLOWERS)], Enum.Material.SmoothPlastic, { CanCollide = false, Name = "Flor" })
+	end
+end
+
+local function createHill(parent, pos, r, h)
+	local tiers = 3
+	for i = 1, tiers do
+		local th = h / tiers
+		cyl(parent, th, r * 2 * (1 - (i - 1) * 0.28), pos + V(0, th * (i - 0.5), 0),
+			i == tiers and C.Ground or C.GroundDark, Enum.Material.Grass, { Name = "Colina" })
+	end
+	hills[#hills + 1] = { pos = pos, r = r, h = h }
+	reserve(pos.X, pos.Z, r + 4)
+end
+
+------------------------------------------------------------------
+-- MONTANHAS
+------------------------------------------------------------------
+local function createMountain(parent, pos, width, height, snow)
+	local tiers = 5
+	local yaw = rng:NextNumber(0, PI)
+	local base = ROCKS[rng:NextInteger(1, #ROCKS)]
+	for i = 1, tiers do
+		local f = (i - 1) / tiers
+		local w = width * (1 - f * 0.82)
+		local h = height / tiers
+		local jx = rng:NextNumber(-1, 1) * width * 0.04 * i
+		local jz = rng:NextNumber(-1, 1) * width * 0.04 * i
+		local color, mat = base:Lerp(Color3.fromRGB(160, 156, 150), f * 0.6), Enum.Material.Rock
+		if i == 1 then
+			color, mat = Color3.fromRGB(62, 96, 56), Enum.Material.Grass
+		elseif i == 2 then
+			color, mat = Color3.fromRGB(78, 88, 62), Enum.Material.Ground
+		elseif snow and i == tiers then
+			color, mat = C.Snow, Enum.Material.Snow
+		end
+		local rel = CFrame.new(pos + V(jx, h * (i - 0.5), jz))
+			* CFrame.Angles(rng:NextNumber(-0.05, 0.05), yaw + i * 0.5, rng:NextNumber(-0.05, 0.05))
+		make(parent, V(w, h + 2, w * rng:NextNumber(0.8, 1.1)), rel, color, mat, { Name = "Montanha" })
+	end
+end
+
+------------------------------------------------------------------
+-- AGUA
+------------------------------------------------------------------
+local function createPond(parent, pos, r)
+	cyl(parent, 0.7, r * 2 + 6, pos + V(0, 0.55, 0), C.Stone, Enum.Material.Slate, { Name = "MargemLago" })
+	cyl(parent, 0.4, r * 2, pos + V(0, 0.75, 0), C.Water, Enum.Material.SmoothPlastic,
+		{ Transparency = 0.2, Reflectance = 0.2, CanCollide = false, Name = "Lago" })
+	reserve(pos.X, pos.Z, r + 6)
+end
+
+local function createRiver(parent, pts, width)
+	for i = 1, #pts - 1 do
+		local a, b = pts[i], pts[i + 1]
+		local mid, len = (a + b) / 2, (b - a).Magnitude
+		local cf = CFrame.lookAt(mid, b)
+		make(parent, V(width, 0.5, len), cf * CFrame.new(0, 0.35, 0), C.Water, Enum.Material.SmoothPlastic,
+			{ Transparency = 0.2, Reflectance = 0.2, CanCollide = false, Name = "Rio" })
+		for _, s in ipairs({ -1, 1 }) do
+			make(parent, V(2.2, 0.9, len), cf * CFrame.new(s * (width / 2 + 1.1), 0.4, 0), C.Stone,
+				Enum.Material.Slate, { Name = "MargemRio" })
+		end
+		riverSegs[#riverSegs + 1] = { ax = a.X, az = a.Z, bx = b.X, bz = b.Z, w = width }
+	end
+	for _, p in ipairs(pts) do
+		cyl(parent, 0.5, width, p + V(0, 0.35, 0), C.Water, Enum.Material.SmoothPlastic,
+			{ Transparency = 0.2, Reflectance = 0.2, CanCollide = false, Name = "RioCurva" })
+	end
+end
+
+local function createWaterfall(parent, base, target, width, height)
+	local flat = V(target.X, base.Y, target.Z)
+	local cf = CFrame.lookAt(base, flat)
+	local rock = Color3.fromRGB(88, 86, 82)
+	-- paredao de pedra atras da queda
+	make(parent, V(width + 30, height, 24), cf * CFrame.new(0, height / 2, 12), rock, Enum.Material.Rock,
+		{ Name = "Paredao" })
+	make(parent, V(width + 30, 4, 44), cf * CFrame.new(0, height + 2, 8), Color3.fromRGB(70, 104, 60),
+		Enum.Material.Grass, { Name = "Topo" })
+	make(parent, V(width, 0.5, 30), cf * CFrame.new(0, height + 4.25, 5), C.Water, Enum.Material.SmoothPlastic,
+		{ Transparency = 0.2, CanCollide = false, Name = "Canal" })
+	-- queda d'agua
+	make(parent, V(width, height + 4, 3), cf * CFrame.new(0, (height + 4) / 2, -1.5), Color3.fromRGB(150, 215, 255),
+		Enum.Material.SmoothPlastic, { Transparency = 0.3, Reflectance = 0.1, CanCollide = false, Name = "Queda" })
+	for i = -1, 1 do
+		make(parent, V(1.2, height * 0.6, 3.3), cf * CFrame.new(i * width * 0.28, height * 0.5, -1.6), C.Foam,
+			Enum.Material.SmoothPlastic, { Transparency = 0.5, CanCollide = false, Name = "Espuma" })
+	end
+	make(parent, V(width + 4, 3, 4), cf * CFrame.new(0, 1.5, -3.5), C.Foam, Enum.Material.SmoothPlastic,
+		{ Transparency = 0.3, CanCollide = false, Name = "EspumaBase" })
+	-- piscina
+	local poolCF = cf * CFrame.new(0, 0, -width * 0.9)
+	local poolPos = poolCF.Position
+	cyl(parent, 0.7, width * 2.6 + 6, poolPos + V(0, 0.55, 0), C.Stone, Enum.Material.Slate, { Name = "MargemPiscina" })
+	cyl(parent, 0.4, width * 2.6, poolPos + V(0, 0.75, 0), C.Water, Enum.Material.SmoothPlastic,
+		{ Transparency = 0.2, Reflectance = 0.2, CanCollide = false, Name = "Piscina" })
+	reserve(poolPos.X, poolPos.Z, width * 1.3 + 10)
+	reserve(base.X, base.Z, width + 25)
+	-- nevoa leve
+	if emitterCount < 4 then
+		emitterCount = emitterCount + 1
+		local anchor = make(parent, V(width, 1, 3), cf * CFrame.new(0, 1, -3), C.Foam, Enum.Material.SmoothPlastic,
+			{ Transparency = 1, CanCollide = false, Name = "Nevoa" })
+		local e = Instance.new("ParticleEmitter")
+		e.Rate = 10
+		e.Lifetime = NumberRange.new(1, 2)
+		e.Speed = NumberRange.new(2, 5)
+		e.Size = NumberSequence.new(3, 6)
+		e.Transparency = NumberSequence.new(0.6, 1)
+		e.Color = ColorSequence.new(C.Foam)
+		e.SpreadAngle = Vector2.new(60, 60)
+		e.Parent = anchor
+	end
+	return poolPos
+end
+
+------------------------------------------------------------------
+-- ESTRADAS, PONTES, PRACAS
+------------------------------------------------------------------
+local function createStreetLight(parent, base, toward)
+	local cf = CFrame.lookAt(base, V(toward.X, base.Y, toward.Z))
+	cyl(parent, 13, 0.8, cf * CFrame.new(0, 6.9, 0), C.DarkMetal, Enum.Material.Metal, { Name = "Poste" })
+	make(parent, V(0.6, 0.6, 5), cf * CFrame.new(0, 13.2, -2.2), C.DarkMetal, Enum.Material.Metal,
+		{ CanCollide = false, Name = "Braco" })
+	local bulb = ball(parent, V(1.8, 1.2, 1.8), cf * CFrame.new(0, 12.8, -4.4), C.Warm, Enum.Material.Neon,
+		{ CanCollide = false, Name = "Lampada" })
+	if streetLightCount < 22 then
+		streetLightCount = streetLightCount + 1
+		addLight(bulb, C.Warm, 28, 1.2, true)
+	end
+end
+
+local function createRoad(parent, a, b, width, opts)
+	opts = opts or {}
+	local dir = (b - a).Unit
+	local len = (b - a).Magnitude
+	local mid = (a + b) / 2
+	local cf = CFrame.lookAt(mid, b)
+	make(parent, V(width, 0.4, len), cf * CFrame.new(0, 0.3, 0), C.Road, Enum.Material.Asphalt, { Name = "Estrada" })
+	make(parent, V(0.5, 0.1, len * 0.97), cf * CFrame.new(0, 0.52, 0), C.Line, Enum.Material.Neon,
+		{ CanCollide = false, Name = "Faixa" })
+	for _, s in ipairs({ -1, 1 }) do
+		make(parent, V(5, 0.8, len), cf * CFrame.new(s * (width / 2 + 2.5), 0.3, 0), C.Sidewalk,
+			Enum.Material.Concrete, { Name = "Calcada" })
+	end
+	roadSegs[#roadSegs + 1] = {
+		ax = a.X, az = a.Z, bx = b.X, bz = b.Z, w = width + 10, trees = opts.Trees, width = width,
+	}
+	if opts.Lights then
+		local perp = V(-dir.Z, 0, dir.X)
+		local n = math.max(1, math.floor(len / (opts.Spacing or 80)))
+		local sides = { -1, 1 }
+		if opts.Both == false then
+			sides = { 1 }
+		end
+		for i = 1, n do
+			local pt = a + dir * (len * (i - 0.5) / n)
+			for _, s in ipairs(sides) do
+				local base = pt + perp * s * (width / 2 + 3)
+				createStreetLight(opts.Lights, base, base - perp * s * 10)
+			end
+		end
+	end
+end
+
+local function createBridge(parent, a, b, width, record)
+	local mid, len = (a + b) / 2, (b - a).Magnitude
+	local cf = CFrame.lookAt(mid, b)
+	make(parent, V(width, 0.6, len + 4), cf * CFrame.new(0, 0.7, 0), C.DarkMetal, Enum.Material.Metal, { Name = "Tabuleiro" })
+	make(parent, V(0.5, 0.1, len + 2), cf * CFrame.new(0, 1.05, 0), C.Line, Enum.Material.Neon,
+		{ CanCollide = false, Name = "FaixaPonte" })
+	local ph = width > 12 and 16 or 7
+	for _, s in ipairs({ -1, 1 }) do
+		make(parent, V(1, 3, len + 4), cf * CFrame.new(s * (width / 2 - 0.5), 2.4, 0), C.DarkMetal,
+			Enum.Material.Metal, { Name = "Guarda" })
+		make(parent, V(0.4, 0.4, len + 4), cf * CFrame.new(s * (width / 2 - 0.5), 4.1, 0), C.Vib,
+			Enum.Material.Neon, { CanCollide = false, Name = "NeonGuarda" })
+		for _, e in ipairs({ -1, 1 }) do
+			cyl(parent, ph, 2.4, cf * CFrame.new(s * (width / 2 + 1), ph / 2, e * (len / 2 + 2)), C.Metal,
+				Enum.Material.Metal, { Name = "Pilar" })
+			ball(parent, V(3, 3, 3), cf * CFrame.new(s * (width / 2 + 1), ph + 1, e * (len / 2 + 2)), C.Vib,
+				Enum.Material.Neon, { CanCollide = false, Name = "LuzPilar" })
+		end
+	end
+	if width > 12 then
+		for _, e in ipairs({ -1, 1 }) do
+			make(parent, V(width + 4, 1.6, 1.6), cf * CFrame.new(0, ph + 0.5, e * (len / 2 + 2)), C.Vib,
+				Enum.Material.Neon, { CanCollide = false, Name = "Portico" })
+		end
+	end
+	if record ~= false then
+		roadSegs[#roadSegs + 1] = { ax = a.X, az = a.Z, bx = b.X, bz = b.Z, w = width + 10 }
+	end
+end
+
+local function createFountain(parent, pos, s)
+	s = s or 1
+	cyl(parent, 1.6, 16 * s, pos + V(0, 0.9, 0), C.Stone, Enum.Material.Slate, { Name = "BaciaFonte" })
+	cyl(parent, 1.7, 13.5 * s, pos + V(0, 1.0, 0), C.Water, Enum.Material.SmoothPlastic,
+		{ Transparency = 0.25, Reflectance = 0.15, CanCollide = false, Name = "AguaFonte" })
+	cyl(parent, 7 * s, 2 * s, pos + V(0, 4.7 * s, 0), C.Gold, Enum.Material.Metal, { Name = "ColunaFonte" })
+	cyl(parent, 5 * s, 0.7 * s, pos + V(0, 10 * s, 0), C.Cyan, Enum.Material.Neon,
+		{ Transparency = 0.3, CanCollide = false, Name = "Jato" })
+	ball(parent, V(2.4 * s, 2.4 * s, 2.4 * s), pos + V(0, 12.8 * s, 0), C.Cyan, Enum.Material.Neon,
+		{ CanCollide = false, Name = "TopoFonte" })
+end
+
+local function createRoundabout(parent, pos, r)
+	cyl(parent, 0.4, r * 2, pos + V(0, 0.3, 0), C.Road, Enum.Material.Asphalt, { Name = "Rotatoria" })
+	cyl(parent, 0.9, r * 1.2, pos + V(0, 0.55, 0), C.Ground, Enum.Material.Grass, { Name = "IlhaRotatoria" })
+	cyl(parent, 0.15, r * 1.3, pos + V(0, 0.52, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "AnelNeon" })
+	createFountain(parent, pos + V(0, 0.5, 0), 0.7)
+	reserve(pos.X, pos.Z, r + 10)
+end
+
+local function createStele(parent, pos, w, h, yaw)
+	local cf = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+	make(parent, V(w + 2, 1, 3), cf * CFrame.new(0, 0.9, 0), C.Metal, Enum.Material.Metal, { Name = "BaseSteleo" })
+	make(parent, V(w + 0.8, h + 0.8, 0.4), cf * CFrame.new(0, 1.4 + h / 2, 0), C.Vib, Enum.Material.Neon,
+		{ CanCollide = false, Name = "MoldeNeon" })
+	local panel = make(parent, V(w, h, 0.8), cf * CFrame.new(0, 1.4 + h / 2, 0), C.DarkMetal, Enum.Material.Metal,
+		{ Name = "PainelMapa" })
+	addMap(panel, Enum.NormalId.Front)
+	addMap(panel, Enum.NormalId.Back)
+end
+
+local function createPlaza(parent, pos, size, pond)
+	make(parent, V(size, 0.5, size), pos + V(0, 0.45, 0), Color3.fromRGB(172, 162, 148), Enum.Material.Slate,
+		{ Name = "Praca" })
+	local half = (size - 4) / 2
+	make(parent, V(size - 4, 0.1, 0.6), pos + V(0, 0.72, half), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	make(parent, V(size - 4, 0.1, 0.6), pos + V(0, 0.72, -half), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	make(parent, V(0.6, 0.1, size - 4), pos + V(half, 0.72, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	make(parent, V(0.6, 0.1, size - 4), pos + V(-half, 0.72, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	if pond then
+		createPond(parent, pos + V(0, 0, 0), 13)
+		createBridge(parent, pos + V(-22, 0, 0), pos + V(22, 0, 0), 8, false)
+	else
+		createFountain(parent, pos + V(0, 0.5, 0), 1.1)
+	end
+	createStele(parent, pos + V(size / 2 - 6, 0.5, size / 2 - 6), 8, 10, PI)
+	reserve(pos.X, pos.Z, size * 0.75)
+end
+
+------------------------------------------------------------------
+-- TECNOLOGIA (pecas reutilizaveis)
+------------------------------------------------------------------
+local function createEnergyTower(parent, pos, h, accent)
+	accent = accent or C.Cyan
+	cyl(parent, h, 6, pos + V(0, h / 2 + 0.4, 0), C.Metal, Enum.Material.Metal, { Name = "TorreEnergia" })
+	cyl(parent, 2, 10, pos + V(0, 1.4, 0), C.DarkMetal, Enum.Material.Metal, { Name = "BaseTorre" })
+	for i = 1, 3 do
+		cyl(parent, 1, 7.6, pos + V(0, h * i / 4 + 0.4, 0), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "AnelEnergia" })
+	end
+	local top = ball(parent, V(5, 5, 5), pos + V(0, h + 3, 0), accent, Enum.Material.Neon,
+		{ CanCollide = false, Name = "NucleoEnergia" })
+	addLight(top, accent, 40, 1.5)
+	reserve(pos.X, pos.Z, 12)
+end
+
+local function createHoloPanel(parent, pos, yaw, w, h, withMap, accent)
+	local cf = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+	cyl(parent, 4, 1, cf * CFrame.new(0, 2, 0), C.Metal, Enum.Material.Metal, { Name = "SuporteHolo" })
+	local p = make(parent, V(w, h, 0.3), cf * CFrame.new(0, 5 + h / 2, 0), accent or C.Cyan, Enum.Material.Neon,
+		{ Transparency = 0.55, CanCollide = false, Name = "PainelHolografico" })
+	if withMap then
+		addMap(p, Enum.NormalId.Front)
+		addMap(p, Enum.NormalId.Back)
+	end
+end
+
+local function createComputer(parent, pos, yaw, accent)
+	local cf = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+	make(parent, V(7, 3, 3.2), cf * CFrame.new(0, 1.5, 0), C.Metal, Enum.Material.Metal, { Name = "Mesa" })
+	make(parent, V(0.6, 2, 0.6), cf * CFrame.new(0, 4, 0.9), C.DarkMetal, Enum.Material.Metal, { CanCollide = false })
+	make(parent, V(5.4, 3.2, 0.3), cf * CFrame.new(0, 5.8, 0.9) * CFrame.Angles(-0.25, 0, 0), accent or C.Cyan,
+		Enum.Material.Neon, { Transparency = 0.15, CanCollide = false, Name = "Tela" })
+	make(parent, V(4, 0.2, 1.2), cf * CFrame.new(0, 3.1, -0.8), accent or C.Cyan, Enum.Material.Neon,
+		{ Transparency = 0.3, CanCollide = false, Name = "Teclado" })
+end
+
+local function createVehicle(parent, pos, yaw, accent)
+	accent = accent or C.Cyan
+	local cf = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+	ball(parent, V(26, 5, 11), cf * CFrame.new(0, 6, 0), C.Metal, Enum.Material.Metal,
+		{ CanCollide = false, Name = "NaveCorpo" })
+	ball(parent, V(8, 4, 6), cf * CFrame.new(0, 8.2, -3), accent, Enum.Material.Glass,
+		{ Transparency = 0.35, CanCollide = false, Name = "Cabine" })
+	make(parent, V(12, 0.8, 5), cf * CFrame.new(-8, 5.6, 3) * CFrame.Angles(0, 0.5, 0.1), C.DarkMetal,
+		Enum.Material.Metal, { CanCollide = false, Name = "AsaE" })
+	make(parent, V(12, 0.8, 5), cf * CFrame.new(8, 5.6, 3) * CFrame.Angles(0, -0.5, -0.1), C.DarkMetal,
+		Enum.Material.Metal, { CanCollide = false, Name = "AsaD" })
+	for _, s in ipairs({ -1, 1 }) do
+		ball(parent, V(2.6, 2.6, 2.6), cf * CFrame.new(s * 4, 6, 5.8), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "Motor" })
+	end
+	ball(parent, V(14, 0.6, 5), cf * CFrame.new(0, 3.4, 0), accent, Enum.Material.Neon,
+		{ Transparency = 0.5, CanCollide = false, Name = "Levitacao" })
+	cyl(parent, 0.3, 22, V(pos.X, 0.9, pos.Z), accent, Enum.Material.Neon, { CanCollide = false, Name = "PousoNave" })
+end
+
+local function createLab(parent, pos, face, w, d, accent)
+	local cf = CFrame.lookAt(pos, V(face.X, pos.Y, face.Z))
+	local h = 16
+	make(parent, V(w, h, d), cf * CFrame.new(0, h / 2 + 0.4, 0), C.DarkMetal, Enum.Material.Metal,
+		{ Shadow = true, Name = "Laboratorio" })
+	make(parent, V(w - 4, h - 5, 0.8), cf * CFrame.new(0, h / 2 + 0.4, -d / 2 - 0.2), accent, Enum.Material.Glass,
+		{ Transparency = 0.35, Reflectance = 0.2, Name = "VidroLab" })
+	make(parent, V(w + 1, 1, d + 1), cf * CFrame.new(0, h + 0.9, 0), accent, Enum.Material.Neon,
+		{ CanCollide = false, Name = "BordaLab" })
+	ball(parent, V(d * 0.6, d * 0.35, d * 0.6), cf * CFrame.new(0, h + 1.5, 0), C.Metal, Enum.Material.Metal,
+		{ Name = "CupulaLab" })
+	make(parent, V(4, 6, 0.5), cf * CFrame.new(0, 3.4, -d / 2 - 0.6), C.Gold, Enum.Material.Neon,
+		{ CanCollide = false, Name = "PortaLab" })
+	for _, s in ipairs({ -1, 1 }) do
+		cyl(parent, 12, 2, cf * CFrame.new(s * (w / 2 + 3), 6.4, -d / 2 - 2), accent, Enum.Material.Neon,
+			{ Transparency = 0.3, CanCollide = false, Name = "TuboLab" })
+	end
+	reserve(pos.X, pos.Z, math.max(w, d) * 0.7)
+end
+
+------------------------------------------------------------------
+-- PREDIOS, CASAS, COMERCIO
+------------------------------------------------------------------
+local function createBuilding(parent, pos, w, d, h, style)
+	local cf = CFrame.lookAt(pos, V(0, pos.Y, 0))
+	local dark = BUILD_COLORS[rng:NextInteger(1, #BUILD_COLORS)]
+	local accent = ACCENTS[rng:NextInteger(1, #ACCENTS)]
+	make(parent, V(w, h, d), cf * CFrame.new(0, h / 2 + 0.3, 0), dark, Enum.Material.Metal,
+		{ Shadow = true, Name = "Predio" })
+	make(parent, V(w * 0.7, h * 0.2, d * 0.7), cf * CFrame.new(0, h + h * 0.1 + 0.3, 0),
+		dark:Lerp(Color3.new(1, 1, 1), 0.12), Enum.Material.Metal, { Name = "Coroa" })
+	local bands = math.clamp(math.floor(h / 22), 1, 3)
+	for i = 1, bands do
+		make(parent, V(w + 0.4, 1.2, d + 0.4), cf * CFrame.new(0, h * i / (bands + 1) + 0.3, 0), accent,
+			Enum.Material.Neon, { CanCollide = false, Name = "FaixaNeon" })
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		make(parent, V(1, h * 0.85, 0.6), cf * CFrame.new(s * w * 0.3, h * 0.5 + 0.3, -d / 2 - 0.3), C.Cyan,
+			Enum.Material.Neon, { CanCollide = false, Name = "TiraVertical" })
+	end
+	if style == "spire" then
+		cyl(parent, h * 0.3, 1.2, cf * CFrame.new(0, h * 1.2 + h * 0.15 + 0.3, 0), C.Metal, Enum.Material.Metal,
+			{ CanCollide = false, Name = "Antena" })
+		ball(parent, V(3, 3, 3), cf * CFrame.new(0, h * 1.5 + 1.8, 0), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "Farol" })
+	elseif style == "dome" then
+		ball(parent, V(math.min(w, d) * 0.7, math.min(w, d) * 0.5, math.min(w, d) * 0.7),
+			cf * CFrame.new(0, h * 1.2 + 0.3, 0), C.Gold, Enum.Material.Metal, { Name = "Cupula" })
+	end
+end
+
+local function createHouse(parent, pos, size)
+	local cf = CFrame.lookAt(pos, V(0, pos.Y, 0))
+	local h = 8 + rng:NextNumber(0, 6)
+	local col = HOUSE_COLORS[rng:NextInteger(1, #HOUSE_COLORS)]
+	local accent = ACCENTS[rng:NextInteger(1, #ACCENTS)]
+	if rng:NextNumber() < 0.5 then
+		make(parent, V(size, h, size * 0.9), cf * CFrame.new(0, h / 2 + 0.3, 0), col, Enum.Material.Concrete,
+			{ Name = "Casa" })
+		make(parent, V(size + 1, 1, size * 0.9 + 1), cf * CFrame.new(0, h + 0.8, 0), C.DarkMetal, Enum.Material.Metal,
+			{ Name = "Laje" })
+		make(parent, V(size * 0.5, 2, 0.4), cf * CFrame.new(0, h * 0.6, -size * 0.45 - 0.2), C.Cyan, Enum.Material.Neon,
+			{ CanCollide = false, Name = "Janela" })
+		make(parent, V(2.5, 4.5, 0.4), cf * CFrame.new(0, 2.6, -size * 0.45 - 0.2), C.Gold, Enum.Material.Neon,
+			{ CanCollide = false, Name = "Porta" })
+	else
+		cyl(parent, h, size, cf * CFrame.new(0, h / 2 + 0.3, 0), col, Enum.Material.Concrete, { Name = "Cabana" })
+		ball(parent, V(size + 1, size * 0.6, size + 1), cf * CFrame.new(0, h + 0.3, 0), C.Terracotta,
+			Enum.Material.Slate, { Name = "TetoCabana" })
+		cyl(parent, 0.8, size + 0.6, cf * CFrame.new(0, h * 0.7, 0), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "AnelCabana" })
+		make(parent, V(2.5, 4.5, 0.5), cf * CFrame.new(0, 2.6, -size / 2 - 0.1), C.Gold, Enum.Material.Neon,
+			{ CanCollide = false, Name = "Porta" })
+	end
+end
+
+local function createMall(parent, pos)
+	local cf = CFrame.lookAt(pos, V(0, pos.Y, 0))
+	make(parent, V(56, 18, 30), cf * CFrame.new(0, 9.3, 0), C.DarkMetal, Enum.Material.Metal,
+		{ Shadow = true, Name = "CentroComercial" })
+	make(parent, V(50, 10, 0.8), cf * CFrame.new(0, 8, -15.2), C.Cyan, Enum.Material.Glass,
+		{ Transparency = 0.4, Reflectance = 0.2, Name = "VidroLoja" })
+	make(parent, V(57, 0.8, 31), cf * CFrame.new(0, 18.6, 0), C.Gold, Enum.Material.Neon,
+		{ CanCollide = false, Name = "BordaLoja" })
+	local sign = make(parent, V(30, 4, 1), cf * CFrame.new(0, 22, -14), C.Metal, Enum.Material.Metal, { Name = "Letreiro" })
+	addLabel(sign, Enum.NormalId.Front, "MERCADO WAKANDA", C.Gold)
+	reserve(pos.X, pos.Z, 38)
+end
+
+local function createMarket(parent, pos)
+	make(parent, V(46, 0.4, 24), pos + V(0, 0.5, 0), C.Sand, Enum.Material.Pavement, { Name = "FeiraBase" })
+	local cols = {
+		Color3.fromRGB(200, 60, 50), Color3.fromRGB(240, 170, 40), Color3.fromRGB(120, 60, 200),
+		Color3.fromRGB(40, 150, 120), Color3.fromRGB(230, 120, 60),
+	}
+	for i = 1, 5 do
+		local x = -18 + (i - 1) * 9
+		make(parent, V(6, 3, 3), pos + V(x, 2.2, -3), C.Trunk, Enum.Material.Wood, { Name = "Balcao" })
+		make(parent, V(8, 0.6, 6), pos + V(x, 8.2, -3), cols[i], Enum.Material.Fabric,
+			{ CanCollide = false, Name = "Toldo" })
+		for _, s in ipairs({ -1, 1 }) do
+			cyl(parent, 7, 0.5, pos + V(x + s * 3.5, 4.2, -5.5), C.DarkMetal, Enum.Material.Metal,
+				{ CanCollide = false, Name = "Pau" })
+		end
+		make(parent, V(5, 0.8, 0.3), pos + V(x, 7.4, -0.2), C.Gold, Enum.Material.Neon,
+			{ CanCollide = false, Name = "PlacaLoja" })
+	end
+	reserve(pos.X, pos.Z, 30)
+end
+
+------------------------------------------------------------------
+-- PALACIO DE WAKANDA (centro 0,0,0 relativo; entrada voltada para +Z)
+------------------------------------------------------------------
+local function createPalace(parent)
+	local P = parent
+	-- praca do palacio
+	cyl(P, 0.4, 200, V(0, 0.5, 0), C.Stone, Enum.Material.Slate, { Name = "PracaPalacio" })
+	cyl(P, 0.2, 176, V(0, 0.72, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "AnelPraca" })
+	cyl(P, 0.25, 172, V(0, 0.75, 0), C.Stone, Enum.Material.Slate, { Name = "PracaInterna" })
+	-- plataforma
+	make(P, V(180, 6, 120), V(0, 3, 0), Color3.fromRGB(48, 44, 58), Enum.Material.Slate, { Shadow = true, Name = "Plataforma" })
+	make(P, V(180, 0.4, 0.8), V(0, 6.1, 60), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "BordaNeon" })
+
+	-- salao principal (oco, com entrada)
+	local wall = C.DarkMetal
+	make(P, V(100, 40, 2), V(0, 26, -40), wall, Enum.Material.Metal, { Shadow = true, Name = "ParedeFundo" })
+	for _, s in ipairs({ -1, 1 }) do
+		make(P, V(2, 40, 70), V(s * 49, 26, -5), wall, Enum.Material.Metal, { Shadow = true, Name = "ParedeLateral" })
+		make(P, V(35, 40, 2), V(s * 32.5, 26, 30), wall, Enum.Material.Metal, { Shadow = true, Name = "ParedeFrente" })
+	end
+	make(P, V(30, 12, 2), V(0, 40, 30), wall, Enum.Material.Metal, { Name = "Verga" })
+	make(P, V(104, 2, 74), V(0, 47, -5), C.Metal, Enum.Material.Metal, { Shadow = true, Name = "Teto" })
+	ball(P, V(56, 56, 56), V(0, 50, -5), C.Metal, Enum.Material.Metal, { Reflectance = 0.15, Name = "Cupula" })
+	cyl(P, 1.5, 60, V(0, 49, -5), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "AnelCupula" })
+	cyl(P, 60, 7, V(0, 108, -5), C.Metal, Enum.Material.Metal, { Name = "EspiraCentral" })
+	local tip = ball(P, V(6, 6, 6), V(0, 140, -5), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "PontaEspira" })
+	addLight(tip, C.Vib, 60, 2)
+
+	-- portal luminoso (atravessavel)
+	make(P, V(30, 28, 0.6), V(0, 20, 29.6), C.Vib, Enum.Material.Neon,
+		{ Transparency = 0.8, CanCollide = false, Name = "PortalNeon" })
+
+	-- interior: piso, mapa holografico, trono, mural, colunas
+	make(P, V(30, 0.2, 64), V(0, 6.1, -5), C.Gold, Enum.Material.Metal, { Name = "Tapete" })
+	cyl(P, 0.1, 34, V(0, 6.2, -5), C.Cyan, Enum.Material.Neon, { CanCollide = false, Name = "AnelMapa" })
+	local floorMap = make(P, V(26, 0.4, 26), V(0, 6.4, -5), C.DarkMetal, Enum.Material.Metal, { Name = "MapaChao" })
+	addMap(floorMap, Enum.NormalId.Top)
+	make(P, V(30, 1.2, 14), V(0, 6.6, -30), C.Metal, Enum.Material.Metal, { Name = "DegrauTrono1" })
+	make(P, V(22, 1.2, 10), V(0, 7.8, -32), C.Metal, Enum.Material.Metal, { Name = "DegrauTrono2" })
+	make(P, V(6, 3, 5), V(0, 9.9, -32), C.Gold, Enum.Material.Metal, { Name = "Trono" })
+	make(P, V(8, 18, 2), V(0, 17.4, -35), C.Black, Enum.Material.Metal, { Name = "EncostoTrono" })
+	make(P, V(8.6, 0.5, 2.2), V(0, 26.6, -35), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	for _, s in ipairs({ -1, 1 }) do
+		make(P, V(0.5, 18, 2.2), V(s * 4.1, 17.4, -35), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+	local mural = make(P, V(64, 22, 0.6), V(0, 24, -38.8), C.DarkMetal, Enum.Material.Metal, { Name = "MuralMundo" })
+	addMap(mural, Enum.NormalId.Back)
+	make(P, V(66, 0.6, 0.8), V(0, 35.3, -38.8), C.Gold, Enum.Material.Neon, { CanCollide = false })
+	make(P, V(66, 0.6, 0.8), V(0, 12.7, -38.8), C.Gold, Enum.Material.Neon, { CanCollide = false })
+	for _, x in ipairs({ -30, 30 }) do
+		for _, z in ipairs({ -25, -5, 15 }) do
+			cyl(P, 34, 4, V(x, 23, z), C.Gold, Enum.Material.Metal, { Name = "ColunaSalao" })
+			cyl(P, 1, 5, V(x, 38, z), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		end
+	end
+	local lamp = ball(P, V(6, 6, 6), V(0, 40, -5), C.VibLight, Enum.Material.Neon, { CanCollide = false, Name = "Lustre" })
+	addLight(lamp, C.VibLight, 70, 2)
+	local holo = make(P, V(24, 12, 0.4), V(0, 24, 8), C.Vib, Enum.Material.Neon,
+		{ Transparency = 0.5, CanCollide = false, Name = "HoloSalao" })
+	addMap(holo, Enum.NormalId.Front)
+	addMap(holo, Enum.NormalId.Back)
+
+	-- fachada monumental
+	for _, s in ipairs({ -1, 1 }) do
+		make(P, V(10, 46, 10), V(s * 22, 29, 38), C.Metal, Enum.Material.Metal, { Shadow = true, Name = "PilarMonumental" })
+		make(P, V(1, 40, 0.4), V(s * 22, 29, 43.2), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+	make(P, V(60, 8, 14), V(0, 50, 38), C.DarkMetal, Enum.Material.Metal, { Shadow = true, Name = "LintelMonumental" })
+	local plaque = make(P, V(36, 5, 0.4), V(0, 50, 45.2), C.Black, Enum.Material.Metal, { Name = "PlacaEntrada" })
+	addLabel(plaque, Enum.NormalId.Back, "WAKANDA FOREVER", C.Gold)
+	-- paineis com o mapa nas laterais do portal
+	for _, s in ipairs({ -1, 1 }) do
+		local pan = make(P, V(22, 22, 1), V(s * 38.5, 22, 31), C.DarkMetal, Enum.Material.Metal, { Name = "MapaFachada" })
+		addMap(pan, Enum.NormalId.Back)
+	end
+
+	-- escadaria
+	for i = 1, 5 do
+		local top = 6 - i
+		make(P, V(60, top, 3), V(0, top / 2, 60 + 3 * (i - 0.5)), Color3.fromRGB(150, 140, 126), Enum.Material.Slate,
+			{ Name = "Degrau" })
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		make(P, V(4, 8, 16), V(s * 32, 4, 68), C.Gold, Enum.Material.Metal, { Name = "Balaustrada" })
+		cyl(P, 12, 1.4, V(s * 32, 14, 62), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "ColunaEscada" })
+	end
+
+	-- alas laterais
+	for _, s in ipairs({ -1, 1 }) do
+		make(P, V(30, 24, 70), V(s * 66, 18, -5), C.Metal, Enum.Material.Metal, { Shadow = true, Name = "AlaPalacio" })
+		make(P, V(30.4, 1, 70.4), V(s * 66, 24, -5), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		make(P, V(24, 2, 0.4), V(s * 66, 16, 30.3), C.Cyan, Enum.Material.Neon, { CanCollide = false })
+	end
+
+	-- torres de canto
+	for _, x in ipairs({ -82, 82 }) do
+		for _, z in ipairs({ -50, 50 }) do
+			cyl(P, 70, 14, V(x, 41, z), C.Metal, Enum.Material.Metal, { Shadow = true, Name = "TorrePalacio" })
+			for _, y in ipairs({ 25, 45, 65 }) do
+				cyl(P, 1, 15.2, V(x, y, z), C.Vib, Enum.Material.Neon, { CanCollide = false })
+			end
+			ball(P, V(9, 9, 9), V(x, 78, z), C.Gold, Enum.Material.Metal, { Name = "CupulaTorre" })
+			cyl(P, 18, 1.2, V(x, 90, z), C.Metal, Enum.Material.Metal, { CanCollide = false })
+			ball(P, V(3, 3, 3), V(x, 99.5, z), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		end
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		cyl(P, 100, 6, V(s * 30, 56, -35), C.Metal, Enum.Material.Metal, { Name = "EspiraTraseira" })
+		cyl(P, 1, 7.2, V(s * 30, 70, -35), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		ball(P, V(4, 4, 4), V(s * 30, 107, -35), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+
+	-- area externa: obeliscos, fontes e naves
+	for _, s in ipairs({ -1, 1 }) do
+		make(P, V(3, 22, 3), V(s * 46, 11.8, 88), C.Black, Enum.Material.Metal, { Name = "Obelisco" })
+		make(P, V(0.6, 20, 0.6), V(s * 46, 11.8, 86.4), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		createFountain(P, V(s * 62, 0.3, 88), 1.4)
+		createVehicle(P, V(s * 78, 5, 70), s * 0.4, C.Vib)
+	end
+	reserve(0, 0, 112)
+end
+
+------------------------------------------------------------------
+-- VIBRANIUM
+------------------------------------------------------------------
+local function createCrystal(parent, pos, h)
+	local cf = CFrame.new(pos) * CFrame.Angles(rng:NextNumber(-0.25, 0.25), rng:NextNumber(0, PI), rng:NextNumber(-0.25, 0.25))
+	make(parent, V(h * 0.22, h, h * 0.22), cf * CFrame.new(0, h / 2, 0), C.Vib, Enum.Material.Neon,
+		{ Transparency = 0.15, CanCollide = false, Name = "CristalVibranium" })
+	make(parent, V(h * 0.16, h * 0.16, h * 0.16), cf * CFrame.new(0, h + h * 0.04, 0) * CFrame.Angles(0.78, 0.78, 0),
+		C.VibLight, Enum.Material.Neon, { CanCollide = false, Name = "PontaCristal" })
+end
+
+local function createVibraniumArea(parent, c)
+	cyl(parent, 0.5, 150, c + V(0, 0.55, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PlataformaVibranium" })
+	cyl(parent, 0.1, 146, c + V(0, 0.83, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "BordaVibranium" })
+	cyl(parent, 0.14, 142, c + V(0, 0.85, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PisoVibranium" })
+	-- cristais centrais
+	for i = 1, 5 do
+		local a = i / 5 * 2 * PI
+		createCrystal(parent, c + V(math.cos(a) * 7, 0.8, math.sin(a) * 7), rng:NextNumber(40, 60))
+	end
+	local core = ball(parent, V(6, 6, 6), c + V(0, 20, 0), C.VibLight, Enum.Material.Neon, { CanCollide = false, Name = "NucleoVibranium" })
+	addLight(core, C.Vib, 70, 2.5)
+	-- anel de cristais
+	for i = 1, 10 do
+		local a = i / 10 * 2 * PI + 0.2
+		createCrystal(parent, c + V(math.cos(a) * 45, 0.8, math.sin(a) * 45), rng:NextNumber(18, 34))
+	end
+	-- minerios (rochas com veios)
+	for i = 1, 8 do
+		local a = i / 8 * 2 * PI
+		local p = c + V(math.cos(a) * 62, 0, math.sin(a) * 62)
+		ball(parent, V(10, 7, 10), p + V(0, 2.5, 0), Color3.fromRGB(52, 46, 66), Enum.Material.Slate, { Name = "Minerio" })
+		make(parent, V(0.8, 6, 0.8), p + V(0, 5, 0), C.Vib, Enum.Material.Neon,
+			{ CanCollide = false, Name = "VeioVibranium" })
+	end
+	-- plataformas tecnologicas
+	for _, o in ipairs({ V(-30, 0, 28), V(30, 0, 28), V(0, 0, 38) }) do
+		cyl(parent, 0.5, 18, c + o + V(0, 1.1, 0), C.Metal, Enum.Material.Metal, { Name = "PlataformaTec" })
+		cyl(parent, 0.1, 18, c + o + V(0, 1.4, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+	-- paredes tecnologicas
+	for k = 0, 7 do
+		local a = (k + 0.5) * PI / 4
+		local p = c + V(math.cos(a) * 70, 0, math.sin(a) * 70)
+		local cf = CFrame.lookAt(p, V(c.X, 0, c.Z))
+		make(parent, V(28, 10, 2), cf * CFrame.new(0, 5.8, 0), C.DarkMetal, Enum.Material.Metal, { Name = "ParedeTec" })
+		make(parent, V(28.2, 0.6, 2.2), cf * CFrame.new(0, 8, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		make(parent, V(0.5, 8, 2.2), cf * CFrame.new(0, 5.8, 0), C.VibLight, Enum.Material.Neon, { CanCollide = false })
+	end
+	-- laboratorios
+	createLab(parent, c + V(0, 0, -48), c, 40, 26, C.Vib)
+	createLab(parent, c + V(-52, 0, -10), c, 26, 20, C.VibLight)
+	-- reator
+	cyl(parent, 36, 12, c + V(34, 18.5, -34), C.Metal, Enum.Material.Metal, { Name = "Reator" })
+	cyl(parent, 30, 8, c + V(34, 18.5, -34), C.Vib, Enum.Material.Neon, { Transparency = 0.45, CanCollide = false })
+	reserve(c.X, c.Z, 105)
+end
+
+------------------------------------------------------------------
+-- AREA TECNOLOGICA
+------------------------------------------------------------------
+local function createTechnologyArea(parent, c)
+	cyl(parent, 0.5, 140, c + V(0, 0.55, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PlataformaTecnologia" })
+	cyl(parent, 0.1, 136, c + V(0, 0.83, 0), C.Cyan, Enum.Material.Neon, { CanCollide = false })
+	cyl(parent, 0.14, 132, c + V(0, 0.85, 0), C.Metal, Enum.Material.Metal, { Name = "PisoTecnologia" })
+	createEnergyTower(parent, c + V(0, 0, 0), 80, C.Cyan)
+	for _, s in ipairs({ V(-40, 0, -40), V(40, 0, -40), V(-40, 0, 40), V(40, 0, 40) }) do
+		createEnergyTower(parent, c + s, 34, C.Vib)
+	end
+	createLab(parent, c + V(0, 0, -52), c, 44, 26, C.Cyan)
+	for i = 0, 5 do
+		local a = PI * 0.15 + i * PI * 0.14
+		local p = c + V(math.cos(a) * 28, 0.9, math.sin(a) * 28)
+		createHoloPanel(parent, p, -a + PI / 2, 12, 8, i % 2 == 0, C.Cyan)
+	end
+	for i = 1, 6 do
+		createComputer(parent, c + V(-40 + i * 12, 0.9, 52), PI, C.Cyan)
+	end
+	createVehicle(parent, c + V(-45, 5, 18), 0.5, C.Cyan)
+	createVehicle(parent, c + V(45, 5, 18), -0.5, C.Cyan)
+	createStele(parent, c + V(0, 0.9, 30), 18, 12, PI)
+	reserve(c.X, c.Z, 90)
+end
+
+------------------------------------------------------------------
+-- AREA DO PANTERA NEGRA
+------------------------------------------------------------------
+local function createDummy(parent, pos)
+	cyl(parent, 6, 2.4, pos + V(0, 3.9, 0), Color3.fromRGB(96, 74, 60), Enum.Material.Wood, { Name = "Boneco" })
+	cyl(parent, 0.8, 3.2, pos + V(0, 5.2, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	ball(parent, V(2.6, 2.6, 2.6), pos + V(0, 8.2, 0), C.Metal, Enum.Material.Metal, { Name = "CabecaBoneco" })
+end
+
+local function createPantherArea(parent, c)
+	cyl(parent, 0.5, 190, c + V(0, 0.55, 0), Color3.fromRGB(34, 32, 42), Enum.Material.Slate, { Name = "PlataformaPantera" })
+	cyl(parent, 0.1, 186, c + V(0, 0.83, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	cyl(parent, 0.14, 182, c + V(0, 0.85, 0), Color3.fromRGB(34, 32, 42), Enum.Material.Slate, { Name = "PisoPantera" })
+
+	-- monumento / estatua
+	local S = c + V(0, 0, -50)
+	make(parent, V(36, 3, 36), S + V(0, 1.9, 0), C.Black, Enum.Material.Basalt, { Name = "Pedestal1" })
+	make(parent, V(28, 3, 28), S + V(0, 4.9, 0), C.Black, Enum.Material.Basalt, { Name = "Pedestal2" })
+	make(parent, V(28.6, 0.6, 28.6), S + V(0, 5.2, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	local ped = make(parent, V(20, 5, 20), S + V(0, 8.9, 0), C.Black, Enum.Material.Basalt, { Name = "Pedestal3" })
+	addLabel(ped, Enum.NormalId.Back, "WAKANDA FOREVER", C.Gold)
+	local y0 = 11.4
+	local suit = C.Black
+	for _, s in ipairs({ -1, 1 }) do
+		make(parent, V(3.4, 11, 3.4), S + V(s * 2.4, y0 + 5.5, 0), suit, Enum.Material.Metal, { Name = "Perna" })
+		make(parent, V(3, 9, 3), S + V(s * 6.5, y0 + 20.5, 1), suit, Enum.Material.Metal, { Name = "Braco" })
+		wedge(parent, V(1.6, 2.6, 1.6), S + V(s * 2, y0 + 33.3, 0), suit, Enum.Material.Metal, { Name = "Orelha" })
+		make(parent, V(1.3, 0.7, 0.3), S + V(s * 1.4, y0 + 29.8, 2.8), C.Foam, Enum.Material.Neon,
+			{ CanCollide = false, Name = "Olho" })
+		make(parent, V(0.4, 9, 0.3), S + V(s * 3.2, y0 + 19.5, 2.6), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+	make(parent, V(9, 3, 4.5), S + V(0, y0 + 12.5, 0), suit, Enum.Material.Metal, { Name = "Quadril" })
+	make(parent, V(10, 11, 5), S + V(0, y0 + 19.5, 0), suit, Enum.Material.Metal, { Name = "Torso" })
+	make(parent, V(14, 3, 5), S + V(0, y0 + 24.5, 0), suit, Enum.Material.Metal, { Name = "Ombros" })
+	for _, s in ipairs({ -1, 1 }) do
+		make(parent, V(11, 3, 3), CFrame.new(S + V(0, y0 + 20, 3.4)) * CFrame.Angles(0, 0, s * 0.35), suit,
+			Enum.Material.Metal, { Name = "AntebracoCruzado" })
+	end
+	make(parent, V(5.6, 6, 5.4), S + V(0, y0 + 29.2, 0), suit, Enum.Material.Metal, { Name = "Cabeca" })
+	local emblem = make(parent, V(4, 0.6, 0.3), S + V(0, y0 + 23, 2.6), C.Vib, Enum.Material.Neon,
+		{ CanCollide = false, Name = "Emblema" })
+	addLight(emblem, C.Vib, 50, 2)
+	createStele(parent, c + V(0, 0.9, -12), 22, 14, 0)
+
+	-- plataforma de treino
+	local tp = c + V(-52, 0, 22)
+	cyl(parent, 0.5, 58, tp + V(0, 0.55, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PlataformaTreino" })
+	cyl(parent, 0.1, 52, tp + V(0, 0.83, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	cyl(parent, 0.14, 49, tp + V(0, 0.86, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PisoTreino" })
+	cyl(parent, 0.1, 30, tp + V(0, 0.9, 0), C.Cyan, Enum.Material.Neon, { CanCollide = false })
+	cyl(parent, 0.14, 27, tp + V(0, 0.92, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PisoTreino2" })
+	for k = 0, 3 do
+		local a = PI / 4 + k * PI / 2
+		createDummy(parent, tp + V(math.cos(a) * 17, 0.9, math.sin(a) * 17))
+		local b = k * PI / 2
+		local px, pz = math.cos(b) * 23, math.sin(b) * 23
+		cyl(parent, 9, 1.6, tp + V(px, 5.2, pz), C.Metal, Enum.Material.Metal, { Name = "PilarTreino" })
+		ball(parent, V(2.4, 2.4, 2.4), tp + V(px, 10.2, pz), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+	for k = 0, 2 do
+		local a = k * 2 * PI / 3
+		ball(parent, V(3, 3, 3), tp + V(math.cos(a) * 8, 11, math.sin(a) * 8), C.Vib, Enum.Material.Neon,
+			{ Transparency = 0.2, CanCollide = false, Name = "AlvoHolografico" })
+	end
+
+	-- arena de combate (octogono)
+	local ar = c + V(52, 0, 22)
+	cyl(parent, 0.5, 52, ar + V(0, 0.55, 0), C.DarkMetal, Enum.Material.Metal, { Name = "ArenaCombate" })
+	cyl(parent, 0.1, 46, ar + V(0, 0.83, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	cyl(parent, 0.14, 43, ar + V(0, 0.86, 0), C.Black, Enum.Material.Metal, { Name = "PisoArena" })
+	cyl(parent, 0.1, 16, ar + V(0, 0.9, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	cyl(parent, 0.14, 13, ar + V(0, 0.92, 0), C.Black, Enum.Material.Metal, { Name = "CentroArena" })
+	make(parent, V(40, 0.1, 0.8), ar + V(0, 0.93, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	make(parent, V(0.8, 0.1, 40), ar + V(0, 0.93, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	for k = 0, 7 do
+		local a = k * PI / 4
+		cyl(parent, 8, 2, ar + V(math.cos(a) * 23, 4.8, math.sin(a) * 23), C.Metal, Enum.Material.Metal, { Name = "PosteArena" })
+		ball(parent, V(2.4, 2.4, 2.4), ar + V(math.cos(a) * 23, 9.2, math.sin(a) * 23), C.Vib, Enum.Material.Neon,
+			{ CanCollide = false })
+		if k ~= 3 then
+			local b = (k + 0.5) * PI / 4
+			local wp = ar + V(math.cos(b) * 21.25, 0, math.sin(b) * 21.25)
+			local cf = CFrame.lookAt(wp, V(ar.X, 0, ar.Z))
+			make(parent, V(18.5, 3.2, 1.4), cf * CFrame.new(0, 2.5, 0), C.Metal, Enum.Material.Metal, { Name = "MuroArena" })
+			make(parent, V(18.5, 0.4, 1.6), cf * CFrame.new(0, 4.3, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		end
+	end
+	createEnergyTower(parent, c + V(-70, 0, -40), 40, C.Vib)
+	createEnergyTower(parent, c + V(70, 0, -40), 40, C.Vib)
+	reserve(c.X, c.Z, 105)
+end
+
+------------------------------------------------------------------
+-- BLOCOS DE CONSTRUCAO DA CIDADE
+------------------------------------------------------------------
+local function ringPt(k)
+	local a = k * PI / 8
+	return V(math.cos(a) * 190, 0, math.sin(a) * 190)
+end
+
+local function createRoads(parent, lights)
+	local ring = {}
+	for k = 0, 15 do
+		ring[k] = ringPt(k)
+	end
+	for k = 0, 15 do
+		createRoad(parent, ring[k], ring[(k + 1) % 16], 26, { Lights = lights, Both = false, Spacing = 80 })
+		cyl(parent, 0.4, 26, ring[k] + V(0, 0.3, 0), C.Road, Enum.Material.Asphalt, { Name = "JuntaAnel" })
+	end
+	-- avenidas principais
+	createRoad(parent, V(0, 0, 95), V(0, 0, 480), 44, { Lights = lights, Trees = true })
+	createRoad(parent, V(0, 0, -95), V(0, 0, -410), 34, { Lights = lights, Trees = true })
+	createRoad(parent, V(95, 0, 0), V(480, 0, 0), 34, { Lights = lights, Trees = true })
+	createRoad(parent, V(-95, 0, 0), V(-265, 0, 0), 34, { Lights = lights, Trees = true })
+	createBridge(parent, V(-265, 0, 0), V(-335, 0, 0), 34)
+	createRoad(parent, V(-335, 0, 0), V(-480, 0, 0), 34, { Lights = lights, Trees = true })
+	-- estrada noroeste com ponte
+	createRoad(parent, ring[10], V(-265, 0, -210), 22, { Lights = lights })
+	createBridge(parent, V(-265, 0, -210), V(-335, 0, -251), 22)
+	createRoad(parent, V(-335, 0, -251), V(-440, 0, -312), 22, { Lights = lights })
+	-- acessos as areas especiais
+	createRoad(parent, ring[14], V(186, 0, -173), 22, { Lights = lights })
+	createRoad(parent, ring[2], V(200, 0, 190), 22, { Lights = lights })
+	createRoad(parent, ring[11], V(-112, 0, -253), 22, { Lights = lights })
+	-- rotatorias
+	for _, k in ipairs({ 0, 4, 8, 12 }) do
+		createRoundabout(parent, ring[k], 26)
+	end
+	createRoundabout(parent, V(480, 0, 0), 26)
+	createRoundabout(parent, V(0, 0, 480), 26)
+	createRoundabout(parent, V(-480, 0, 0), 26)
+end
+
+local function createCity(parent)
+	local bands = {
+		{ r = 125, hMin = 70, hMax = 120, kind = "sky" },
+		{ r = 160, hMin = 50, hMax = 95, kind = "sky" },
+		{ r = 225, hMin = 28, hMax = 62, kind = "mid" },
+		{ r = 262, hMin = 24, hMax = 50, kind = "mid" },
+		{ r = 298, hMin = 18, hMax = 40, kind = "mid" },
+		{ r = 335, hMin = 12, hMax = 28, kind = "house" },
+		{ r = 370, hMin = 10, hMax = 22, kind = "house" },
+	}
+	local styles = { "spire", "dome", "plain" }
+	for bi, band in ipairs(bands) do
+		local n = math.floor(2 * PI * band.r / 48)
+		for i = 0, n - 1 do
+			local ang = (i / n) * 2 * PI + bi * 0.2 + rng:NextNumber(-0.03, 0.03)
+			local x = math.cos(ang) * band.r + rng:NextNumber(-4, 4)
+			local z = math.sin(ang) * band.r + rng:NextNumber(-4, 4)
+			if math.abs(x) >= 42 and math.abs(z) >= 42 and not blocked(x, z, 18) then
+				local pos = V(x, 0.3, z)
+				local roll = rng:NextNumber()
+				if band.kind == "sky" then
+					createBuilding(parent, pos, rng:NextNumber(20, 30), rng:NextNumber(20, 30),
+						rng:NextNumber(band.hMin, band.hMax), styles[rng:NextInteger(1, 3)])
+				elseif band.kind == "mid" then
+					if roll < 0.45 then
+						createHouse(parent, pos, rng:NextNumber(10, 14))
+					else
+						createBuilding(parent, pos, rng:NextNumber(14, 22), rng:NextNumber(14, 22),
+							rng:NextNumber(band.hMin, band.hMax), "plain")
+					end
+				else
+					if roll < 0.8 then
+						createHouse(parent, pos, rng:NextNumber(10, 14))
+					else
+						createBuilding(parent, pos, rng:NextNumber(12, 16), rng:NextNumber(12, 16),
+							rng:NextNumber(band.hMin, band.hMax), "plain")
+					end
+				end
+				reserve(x, z, 14)
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------
+-- VEGETACAO (distribuicao)
+------------------------------------------------------------------
+local function createVegetation(parent)
+	-- jardim do palacio
+	for k = 0, 29 do
+		local a = k / 30 * 2 * PI
+		local x, z = math.cos(a) * 112, math.sin(a) * 112
+		if math.abs(x) > 34 and math.abs(z) > 34 and not blocked(x, z, 4) then
+			if k % 2 == 0 then
+				createTree(parent, V(x, 0.3, z), 0.9)
+			else
+				createBush(parent, V(x, 0.3, z), 1.2)
+			end
+		end
+	end
+	-- arvores nas avenidas
+	for _, s in ipairs(roadSegs) do
+		if s.trees then
+			local dx, dz = s.bx - s.ax, s.bz - s.az
+			local len = math.sqrt(dx * dx + dz * dz)
+			local ux, uz = dx / len, dz / len
+			local px, pz = -uz, ux
+			local steps = math.floor(len / 40)
+			for i = 1, steps do
+				for _, side in ipairs({ -1, 1 }) do
+					local off = s.width / 2 + 13
+					local x = s.ax + ux * i * 40 + px * off * side
+					local z = s.az + uz * i * 40 + pz * off * side
+					if not blocked(x, z, 4) then
+						createTree(parent, V(x, groundY(x, z), z), 0.85)
+					end
+				end
+			end
+		end
+	end
+	-- margens do rio
+	for i = 1, #riverSegs do
+		local s = riverSegs[i]
+		local dx, dz = s.bx - s.ax, s.bz - s.az
+		local len = math.sqrt(dx * dx + dz * dz)
+		local ux, uz = dx / len, dz / len
+		for j = 1, math.floor(len / 36) do
+			for _, side in ipairs({ -1, 1 }) do
+				local x = s.ax + ux * j * 36 - uz * (s.w / 2 + 16) * side
+				local z = s.az + uz * j * 36 + ux * (s.w / 2 + 16) * side
+				if not blocked(x, z, 6, true) then
+					if j % 2 == 0 then
+						createTree(parent, V(x, groundY(x, z), z), 1)
+					else
+						createBush(parent, V(x, groundY(x, z), z), 1.3)
+					end
+				end
+			end
+		end
+	end
+	-- colinas
+	for _, h in ipairs(hills) do
+		createTree(parent, h.pos + V(rng:NextNumber(-8, 8), h.h, rng:NextNumber(-8, 8)), 1.2)
+		createTree(parent, h.pos + V(rng:NextNumber(-12, 12), h.h, rng:NextNumber(-12, 12)), 0.9)
+		createBush(parent, h.pos + V(rng:NextNumber(-12, 12), h.h, rng:NextNumber(-12, 12)), 1.4)
+	end
+	-- base das montanhas
+	for _, m in ipairs(innerMountains) do
+		local rad = m.pos.Unit
+		local tan = V(-rad.Z, 0, rad.X)
+		for i = 1, 5 do
+			local p = m.pos - rad * (m.w * 0.55 + rng:NextNumber(10, 50)) + tan * rng:NextNumber(-m.w * 0.4, m.w * 0.4)
+			if not blocked(p.X, p.Z, 6) then
+				if i % 2 == 0 then
+					createBush(parent, V(p.X, 0, p.Z), 1.6)
+				else
+					createTree(parent, V(p.X, 0, p.Z), 1.3)
+				end
+			end
+		end
+	end
+	-- campo aberto
+	for _ = 1, 70 do
+		local a = rng:NextNumber(0, 2 * PI)
+		local r = rng:NextNumber(350, 560)
+		local x, z = math.cos(a) * r, math.sin(a) * r
+		if not blocked(x, z, 8) then
+			createTree(parent, V(x, groundY(x, z), z), rng:NextNumber(0.9, 1.4))
+		end
+	end
+	-- arbustos e plantas pela cidade
+	for _ = 1, 60 do
+		local a = rng:NextNumber(0, 2 * PI)
+		local r = rng:NextNumber(100, 400)
+		local x, z = math.cos(a) * r, math.sin(a) * r
+		if not blocked(x, z, 4) then
+			createBush(parent, V(x, groundY(x, z), z), rng:NextNumber(0.9, 1.5))
+		end
+	end
+end
+
+------------------------------------------------------------------
+-- LUZ DO AMBIENTE
+------------------------------------------------------------------
+local function applyLighting()
+	Lighting.ClockTime = 18.3
+	Lighting.Brightness = 2
+	Lighting.Ambient = Color3.fromRGB(70, 70, 100)
+	Lighting.OutdoorAmbient = Color3.fromRGB(90, 90, 120)
+	local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+	if not atm then
+		atm = Instance.new("Atmosphere")
+		atm.Parent = Lighting
+	end
+	atm.Density = 0.22
+	atm.Haze = 0.6
+	atm.Color = Color3.fromRGB(190, 170, 230)
+end
+
+------------------------------------------------------------------
+-- WAKANDA COMPLETA
+------------------------------------------------------------------
+local function run(name, fn)
+	local ok, err = pcall(fn)
+	if not ok then
+		warn("[Wakanda] erro em " .. name .. ": " .. tostring(err))
+	end
+	task.wait()
+end
+
+local function createWakanda()
+	local old = workspace:FindFirstChild("Wakanda")
+	if old then
+		old:Destroy()
+	end
+	local root = Instance.new("Folder")
+	root.Name = "Wakanda"
+	root.Parent = workspace
+
+	local F = {}
+	for _, n in ipairs({ "Terreno", "Palacio", "Cidade", "Estradas", "Montanhas", "Vegetacao", "Agua",
+		"Vibranium", "Tecnologia", "Pantera", "Iluminacao" }) do
+		F[n] = folder(root, n)
+	end
+
+	local VIB_C = V(270, 0, 250)
+	local PAN_C = V(260, 0, -230)
+	local TEC_C = V(-150, 0, -340)
+
+	run("terreno", function()
+		make(F.Terreno, V(2000, 2, 2000), V(0, -1, 0), C.Ground, Enum.Material.Grass, { Name = "Terreno" })
+		cyl(F.Terreno, 0.3, 840, V(0, 0.15, 0), C.City, Enum.Material.Concrete, { Name = "BaseCidade" })
+	end)
+
+	run("estradas", function()
+		createRoads(F.Estradas, F.Iluminacao)
+	end)
+
+	local waterfalls = {}
+	run("agua", function()
+		local nPool = createWaterfall(F.Agua, V(0, 0, -520), V(0, 0, -300), 44, 130)
+		waterfalls[#waterfalls + 1] = V(0, 0, -520)
+		createPond(F.Agua, nPool, 40)
+		local nwBase = V(-440, 0, -470)
+		local nwPool = createWaterfall(F.Agua, nwBase, V(-300, 0, -250), 34, 110)
+		waterfalls[#waterfalls + 1] = nwBase
+		createRiver(F.Agua, {
+			nwPool, V(-300, 0, -250), V(-300, 0, 40), V(-260, 0, 220), V(-120, 0, 330),
+		}, 26)
+		createPond(F.Agua, V(-120, 0, 330), 40)
+		waterfalls[#waterfalls + 1] = V(440, 0, -390)
+		createWaterfall(F.Agua, V(440, 0, -390), V(200, 0, -100), 30, 100)
+		waterfalls[#waterfalls + 1] = V(520, 0, 330)
+		createWaterfall(F.Agua, V(520, 0, 330), V(250, 0, 150), 30, 100)
+	end)
+
+	run("palacio", function()
+		createPalace(F.Palacio)
+	end)
+	run("vibranium", function()
+		createVibraniumArea(F.Vibranium, VIB_C)
+	end)
+	run("tecnologia", function()
+		createTechnologyArea(F.Tecnologia, TEC_C)
+	end)
+	run("pantera", function()
+		createPantherArea(F.Pantera, PAN_C)
+	end)
+
+	run("pracas", function()
+		createPlaza(F.Cidade, V(100, 0, 100), 56, false)
+		createPlaza(F.Cidade, V(-100, 0, 100), 56, false)
+		createPlaza(F.Cidade, V(100, 0, -100), 56, false)
+		createPlaza(F.Cidade, V(-100, 0, -100), 56, true)
+	end)
+
+	run("comercio", function()
+		for _, p in ipairs({ V(270, 0, 90), V(-215, 0, -100), V(150, 0, 300) }) do
+			if not blocked(p.X, p.Z, 28) then
+				createMall(F.Cidade, V(p.X, 0.3, p.Z))
+			end
+		end
+		for _, p in ipairs({ V(-120, 0, 260), V(300, 0, -60), V(-250, 0, 120) }) do
+			if not blocked(p.X, p.Z, 26) then
+				createMarket(F.Cidade, V(p.X, 0, p.Z))
+			end
+		end
+	end)
+
+	run("cidade", function()
+		createCity(F.Cidade)
+	end)
+
+	run("torres", function()
+		local placed = 0
+		local tries = 0
+		while placed < 6 and tries < 60 do
+			tries = tries + 1
+			local a = rng:NextNumber(0, 2 * PI)
+			local r = rng:NextNumber(220, 390)
+			local x, z = math.cos(a) * r, math.sin(a) * r
+			if not blocked(x, z, 12) then
+				createEnergyTower(F.Tecnologia, V(x, 0.3, z), rng:NextNumber(45, 70), C.Cyan)
+				placed = placed + 1
+			end
+		end
+	end)
+
+	run("colinas", function()
+		local made, tries = 0, 0
+		while made < 12 and tries < 80 do
+			tries = tries + 1
+			local a = rng:NextNumber(0, 2 * PI)
+			local r = rng:NextNumber(440, 540)
+			local x, z = math.cos(a) * r, math.sin(a) * r
+			local rad = rng:NextNumber(35, 65)
+			if not blocked(x, z, rad + 10) then
+				createHill(F.Terreno, V(x, 0, z), rad, rng:NextNumber(8, 18))
+				made = made + 1
+			end
+		end
+	end)
+
+	run("montanhas", function()
+		for i = 0, 17 do
+			local ang = i / 18 * 2 * PI + rng:NextNumber(-0.08, 0.08)
+			local r = 800 + rng:NextNumber(-40, 40)
+			local pos = V(math.cos(ang) * r, 0, math.sin(ang) * r)
+			local w = rng:NextNumber(300, 380)
+			local h = rng:NextNumber(230, 340)
+			createMountain(F.Montanhas, pos, w, h, true)
+			local rad = pos.Unit
+			local tan = V(-rad.Z, 0, rad.X)
+			createMountain(F.Montanhas, pos - rad * w * 0.35 + tan * w * 0.3, w * 0.6, h * 0.65, true)
+		end
+		for i = 0, 13 do
+			local ang = i / 14 * 2 * PI + rng:NextNumber(-0.06, 0.06)
+			local pos = V(math.cos(ang) * 640, 0, math.sin(ang) * 640)
+			local near = false
+			for _, wf in ipairs(waterfalls) do
+				if (wf - pos).Magnitude < 190 then
+					near = true
+				end
+			end
+			if not near then
+				local w = rng:NextNumber(170, 230)
+				createMountain(F.Montanhas, pos, w, rng:NextNumber(90, 190), false)
+				innerMountains[#innerMountains + 1] = { pos = pos, w = w }
+			end
+		end
+	end)
+
+	run("vegetacao", function()
+		createVegetation(F.Vegetacao)
+	end)
+
+	if CONFIG.ApplyLighting then
+		run("iluminacao", applyLighting)
+	end
+
+	if CONFIG.TeleportPlayer then
+		local player = Players.LocalPlayer
+		local char = player.Character or player.CharacterAdded:Wait()
+		char:PivotTo(CFrame.new(CENTER + V(0, 8, 130)))
+	end
+
+	print(string.format("[Wakanda] pronta: %d partes, %d luzes.", partCount, lightCount + streetLightCount))
+end
+
+task.spawn(createWakanda)
