@@ -12,7 +12,7 @@ end
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 
-local CENTER = Vector3.new(1170, 0, 432)
+local CENTER = Vector3.new(2933, 2, -119)
 local MAP_TEXTURE = "rbxassetid://33384188"
 
 local CONFIG = {
@@ -78,6 +78,32 @@ local FLOWERS = {
 ------------------------------------------------------------------
 -- UTILIDADES BASICAS
 ------------------------------------------------------------------
+-- escala/deslocamento temporario para construir areas maiores reutilizando as mesmas funcoes
+local curScale = 1
+local curOff = Vector3.zero
+
+local function applyScale(size, rel)
+	if curScale == 1 and curOff == Vector3.zero then
+		return size, rel
+	end
+	if typeof(rel) == "Vector3" then
+		rel = rel * curScale + curOff
+	else
+		rel = CFrame.new(rel.Position * curScale + curOff) * rel.Rotation
+	end
+	return size * curScale, rel
+end
+
+local function withScale(s, off, fn)
+	local ps, po = curScale, curOff
+	curScale, curOff = s, off or Vector3.zero
+	local ok, err = pcall(fn)
+	curScale, curOff = ps, po
+	if not ok then
+		warn("[Wakanda] erro: " .. tostring(err))
+	end
+end
+
 local function toCF(rel)
 	if typeof(rel) == "Vector3" then
 		return CFrame.new(CENTER + rel)
@@ -112,6 +138,7 @@ end
 
 local function make(parent, size, rel, color, material, opts)
 	opts = opts or {}
+	size, rel = applyScale(size, rel)
 	local p = Instance.new(opts.Class or "Part")
 	p.Anchored = true
 	p.Size = size
@@ -221,7 +248,7 @@ local function distSeg(px, pz, ax, az, bx, bz)
 end
 
 local function reserve(x, z, r)
-	circles[#circles + 1] = { x = x, z = z, r = r }
+	circles[#circles + 1] = { x = x * curScale + curOff.X, z = z * curScale + curOff.Z, r = r * curScale }
 end
 
 local function blocked(x, z, pad, allowRiver)
@@ -246,7 +273,7 @@ local function blocked(x, z, pad, allowRiver)
 end
 
 local function groundY(x, z)
-	if math.sqrt(x * x + z * z) < 415 then
+	if math.sqrt(x * x + z * z) < 600 then
 		return 0.3
 	end
 	return 0
@@ -586,24 +613,98 @@ local function createVehicle(parent, pos, yaw, accent)
 	cyl(parent, 0.3, 22, V(pos.X, 0.9, pos.Z), accent, Enum.Material.Neon, { CanCollide = false, Name = "PousoNave" })
 end
 
-local function createLab(parent, pos, face, w, d, accent)
+
+local function createLab(parent, pos, face, w, d, accent, title)
 	local cf = CFrame.lookAt(pos, V(face.X, pos.Y, face.Z))
-	local h = 16
-	make(parent, V(w, h, d), cf * CFrame.new(0, h / 2 + 0.4, 0), C.DarkMetal, Enum.Material.Metal,
-		{ Shadow = true, Name = "Laboratorio" })
-	make(parent, V(w - 4, h - 5, 0.8), cf * CFrame.new(0, h / 2 + 0.4, -d / 2 - 0.2), accent, Enum.Material.Glass,
-		{ Transparency = 0.35, Reflectance = 0.2, Name = "VidroLab" })
-	make(parent, V(w + 1, 1, d + 1), cf * CFrame.new(0, h + 0.9, 0), accent, Enum.Material.Neon,
-		{ CanCollide = false, Name = "BordaLab" })
-	ball(parent, V(d * 0.6, d * 0.35, d * 0.6), cf * CFrame.new(0, h + 1.5, 0), C.Metal, Enum.Material.Metal,
-		{ Name = "CupulaLab" })
-	make(parent, V(4, 6, 0.5), cf * CFrame.new(0, 3.4, -d / 2 - 0.6), C.Gold, Enum.Material.Neon,
-		{ CanCollide = false, Name = "PortaLab" })
+	local _, yaw = cf:ToEulerAnglesYXZ()
+	local metal = C.DarkMetal
+	local G, F = 14, 12 -- altura do terreo e de cada andar
+	local y0 = 1.5 -- topo da plataforma
+
+	-- plataforma de acesso
+	make(parent, V(w + 40, 1.2, d + 44), cf * CFrame.new(0, 0.9, -8), C.Metal, Enum.Material.Metal,
+		{ Name = "PlataformaLab" })
+	make(parent, V(w + 40.4, 0.3, d + 44.4), cf * CFrame.new(0, 1.5, -8), accent, Enum.Material.Neon,
+		{ CanCollide = false, Name = "BordaPlataforma" })
+
+	-- terreo oco (entrada, grande corredor e sala de pesquisa)
+	make(parent, V(w, G, 2), cf * CFrame.new(0, y0 + G / 2, d / 2 - 1), metal, Enum.Material.Metal,
+		{ Shadow = true, Name = "ParedeFundoLab" })
 	for _, s in ipairs({ -1, 1 }) do
-		cyl(parent, 12, 2, cf * CFrame.new(s * (w / 2 + 3), 6.4, -d / 2 - 2), accent, Enum.Material.Neon,
-			{ Transparency = 0.3, CanCollide = false, Name = "TuboLab" })
+		make(parent, V(2, G, d), cf * CFrame.new(s * (w / 2 - 1), y0 + G / 2, 0), metal, Enum.Material.Metal,
+			{ Shadow = true, Name = "ParedeLab" })
+		make(parent, V((w - 10) / 2, G, 2), cf * CFrame.new(s * ((w - 10) / 4 + 5), y0 + G / 2, -d / 2 + 1), metal,
+			Enum.Material.Metal, { Shadow = true, Name = "FrenteLab" })
+		make(parent, V(0.6, G - 2, 0.6), cf * CFrame.new(s * 5.3, y0 + G / 2, -d / 2 - 0.2), accent,
+			Enum.Material.Neon, { CanCollide = false, Name = "BatenteNeon" })
 	end
-	reserve(pos.X, pos.Z, math.max(w, d) * 0.7)
+	make(parent, V(w, 2, d), cf * CFrame.new(0, y0 + G + 1, 0), metal, Enum.Material.Metal,
+		{ Shadow = true, Name = "TetoTerreo" })
+	make(parent, V(w - 4, 0.3, d - 4), cf * CFrame.new(0, y0 + 0.15, 0), Color3.fromRGB(40, 42, 58),
+		Enum.Material.Metal, { Name = "PisoLab" })
+	make(parent, V(2.4, 0.1, d - 8), cf * CFrame.new(0, y0 + 0.35, 0), accent, Enum.Material.Neon,
+		{ CanCollide = false, Name = "CorredorNeon" })
+	cyl(parent, 1.2, 12, cf * CFrame.new(0, y0 + 0.9, 4), C.Metal, Enum.Material.Metal, { Name = "MesaHolo" })
+	ball(parent, V(5, 5, 5), cf * CFrame.new(0, y0 + 5, 4), accent, Enum.Material.Neon,
+		{ Transparency = 0.35, CanCollide = false, Name = "HologramaLab" })
+	for _, s in ipairs({ -1, 1 }) do
+		createComputer(parent, (cf * CFrame.new(s * (w / 2 - 8), y0 + 0.3, d / 2 - 5)).Position, yaw, accent)
+	end
+
+	-- andares superiores
+	local top = y0 + G + 2
+	for i = 1, 3 do
+		local inset = i * 0.05
+		local ww, dd = w * (1 - inset), d * (1 - inset)
+		make(parent, V(ww, F, dd), cf * CFrame.new(0, top + F * (i - 0.5), 0), metal:Lerp(C.Metal, i / 6),
+			Enum.Material.Metal, { Shadow = true, Name = "AndarLab" })
+		make(parent, V(ww + 0.8, 0.8, dd + 0.8), cf * CFrame.new(0, top + F * i, 0), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "LinhaAndar" })
+		make(parent, V(ww * 0.84, F * 0.5, 0.6), cf * CFrame.new(0, top + F * (i - 0.5), -dd / 2 - 0.2), C.Cyan,
+			Enum.Material.Glass, { Transparency = 0.45, CanCollide = false, Name = "SalaPesquisa" })
+	end
+	local roofY = top + F * 3
+
+	-- cupula de pesquisa
+	ball(parent, V(d * 0.7, d * 0.4, d * 0.7), cf * CFrame.new(0, roofY + 1, 0), C.Metal, Enum.Material.Metal,
+		{ Reflectance = 0.15, Name = "CupulaPesquisa" })
+	cyl(parent, 1.2, d * 0.72, cf * CFrame.new(0, roofY + 0.8, 0), accent, Enum.Material.Neon,
+		{ CanCollide = false, Name = "AnelCupula" })
+
+	-- placa de entrada
+	local plaque = make(parent, V(w * 0.5, 4, 1.2), cf * CFrame.new(0, y0 + G + 1, -d / 2 - 0.8), C.Black,
+		Enum.Material.Metal, { Name = "PlacaLab" })
+	addLabel(plaque, Enum.NormalId.Front, title or "LABORATORIO DE WAKANDA", C.Gold)
+
+	-- alas laterais, corredores suspensos, torres e energia
+	local gap = 16
+	for _, s in ipairs({ -1, 1 }) do
+		local ww, dd, hh = w * 0.5, d * 0.72, 30
+		local wx = s * (w / 2 + gap + ww / 2)
+		make(parent, V(ww, hh, dd), cf * CFrame.new(wx, y0 + hh / 2, d * 0.1), metal, Enum.Material.Metal,
+			{ Shadow = true, Name = "AlaLab" })
+		make(parent, V(ww + 0.8, 0.8, dd + 0.8), cf * CFrame.new(wx, y0 + hh, d * 0.1), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "BordaAla" })
+		make(parent, V(ww * 0.8, 9, 0.6), cf * CFrame.new(wx, y0 + hh * 0.55, d * 0.1 - dd / 2 - 0.2), C.Cyan,
+			Enum.Material.Glass, { Transparency = 0.45, CanCollide = false, Name = "SalaAla" })
+		make(parent, V(gap + 4, 7, 7), cf * CFrame.new(s * (w / 2 + gap / 2), y0 + 20, d * 0.1), C.Cyan,
+			Enum.Material.Glass, { Shape = Enum.PartType.Cylinder, Transparency = 0.4, CanCollide = false, Name = "CorredorSuspenso" })
+		ball(parent, V(ww * 0.8, ww * 0.5, ww * 0.8), cf * CFrame.new(wx, y0 + hh + 2, d * 0.1), C.Metal,
+			Enum.Material.Metal, { Name = "CupulaAla" })
+		cyl(parent, 46, 3, cf * CFrame.new(s * (w * 0.3), roofY + 23, d * 0.2), C.Metal, Enum.Material.Metal,
+			{ Name = "TorreCom" })
+		cyl(parent, 1, 4.4, cf * CFrame.new(s * (w * 0.3), roofY + 40, d * 0.2), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "AnelTorre" })
+		ball(parent, V(4, 4, 4), cf * CFrame.new(s * (w * 0.3), roofY + 47, d * 0.2), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "LuzTorre" })
+		cyl(parent, 38, 4, cf * CFrame.new(s * (w / 2 + 6), y0 + 19, -d / 2 - 4), C.Gold, Enum.Material.Metal,
+			{ Name = "PilarFrontalLab" })
+		cyl(parent, 1.2, 5, cf * CFrame.new(s * (w / 2 + 6), y0 + 38.6, -d / 2 - 4), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "AnelPilar" })
+		createEnergyTower(parent, (cf * CFrame.new(s * (w / 2 + 34), y0, -d / 2 - 22)).Position, 46, accent)
+		createHoloPanel(parent, (cf * CFrame.new(s * 22, y0, -d / 2 - 14)).Position, yaw, 14, 9, true, accent)
+	end
+	reserve(pos.X, pos.Z, math.max(w, d) * 0.9)
 end
 
 ------------------------------------------------------------------
@@ -613,33 +714,51 @@ local function createBuilding(parent, pos, w, d, h, style)
 	local cf = CFrame.lookAt(pos, V(0, pos.Y, 0))
 	local dark = BUILD_COLORS[rng:NextInteger(1, #BUILD_COLORS)]
 	local accent = ACCENTS[rng:NextInteger(1, #ACCENTS)]
-	make(parent, V(w, h, d), cf * CFrame.new(0, h / 2 + 0.3, 0), dark, Enum.Material.Metal,
-		{ Shadow = true, Name = "Predio" })
-	make(parent, V(w * 0.7, h * 0.2, d * 0.7), cf * CFrame.new(0, h + h * 0.1 + 0.3, 0),
-		dark:Lerp(Color3.new(1, 1, 1), 0.12), Enum.Material.Metal, { Name = "Coroa" })
-	local bands = math.clamp(math.floor(h / 22), 1, 3)
-	for i = 1, bands do
-		make(parent, V(w + 0.4, 1.2, d + 0.4), cf * CFrame.new(0, h * i / (bands + 1) + 0.3, 0), accent,
-			Enum.Material.Neon, { CanCollide = false, Name = "FaixaNeon" })
+	local ph = math.max(14, h * 0.1)
+	local h1, h2, h3 = h * 0.55, h * 0.3, h * 0.15
+	-- podio
+	make(parent, V(w * 1.35, ph, d * 1.35), cf * CFrame.new(0, ph / 2 + 0.3, 0), dark:Lerp(C.Stone, 0.35),
+		Enum.Material.Concrete, { Shadow = true, Name = "Podio" })
+	make(parent, V(w * 1.38, 1.2, d * 1.38), cf * CFrame.new(0, ph + 0.9, 0), accent, Enum.Material.Neon,
+		{ CanCollide = false, Name = "BordaPodio" })
+	-- torre em tres niveis
+	make(parent, V(w, h1, d), cf * CFrame.new(0, ph + h1 / 2, 0), dark, Enum.Material.Metal,
+		{ Shadow = true, Name = "Torre" })
+	make(parent, V(w * 0.78, h2, d * 0.78), cf * CFrame.new(0, ph + h1 + h2 / 2, 0),
+		dark:Lerp(Color3.new(1, 1, 1), 0.08), Enum.Material.Metal, { Name = "TorreMedia" })
+	make(parent, V(w * 0.55, h3, d * 0.55), cf * CFrame.new(0, ph + h1 + h2 + h3 / 2, 0),
+		dark:Lerp(Color3.new(1, 1, 1), 0.14), Enum.Material.Metal, { Name = "TorreTopo" })
+	-- andares (faixas de neon)
+	local floors = math.clamp(math.floor(h / 45), 2, 5)
+	for i = 1, floors do
+		make(parent, V(w + 0.6, 1.4, d + 0.6), cf * CFrame.new(0, ph + h1 * i / (floors + 1), 0), accent,
+			Enum.Material.Neon, { CanCollide = false, Name = "Andar" })
 	end
+	make(parent, V(w * 0.6, h1 * 0.9, 0.8), cf * CFrame.new(0, ph + h1 * 0.5, -d / 2 - 0.3), C.Cyan,
+		Enum.Material.Glass, { Transparency = 0.55, CanCollide = false, Name = "VidroFrontal" })
 	for _, s in ipairs({ -1, 1 }) do
-		make(parent, V(1, h * 0.85, 0.6), cf * CFrame.new(s * w * 0.3, h * 0.5 + 0.3, -d / 2 - 0.3), C.Cyan,
+		make(parent, V(1.2, h1 * 0.95, 0.6), cf * CFrame.new(s * w * 0.42, ph + h1 * 0.5, -d / 2 - 0.3), accent,
 			Enum.Material.Neon, { CanCollide = false, Name = "TiraVertical" })
 	end
+	local topY = ph + h
 	if style == "spire" then
-		cyl(parent, h * 0.3, 1.2, cf * CFrame.new(0, h * 1.2 + h * 0.15 + 0.3, 0), C.Metal, Enum.Material.Metal,
+		cyl(parent, h * 0.2, 1.6, cf * CFrame.new(0, topY + h * 0.1, 0), C.Metal, Enum.Material.Metal,
 			{ CanCollide = false, Name = "Antena" })
-		ball(parent, V(3, 3, 3), cf * CFrame.new(0, h * 1.5 + 1.8, 0), accent, Enum.Material.Neon,
+		ball(parent, V(4, 4, 4), cf * CFrame.new(0, topY + h * 0.2 + 2, 0), accent, Enum.Material.Neon,
 			{ CanCollide = false, Name = "Farol" })
 	elseif style == "dome" then
-		ball(parent, V(math.min(w, d) * 0.7, math.min(w, d) * 0.5, math.min(w, d) * 0.7),
-			cf * CFrame.new(0, h * 1.2 + 0.3, 0), C.Gold, Enum.Material.Metal, { Name = "Cupula" })
+		ball(parent, V(w * 0.5, w * 0.35, d * 0.5), cf * CFrame.new(0, topY, 0), C.Gold, Enum.Material.Metal,
+			{ Name = "Cupula" })
+	else
+		cyl(parent, 1, math.min(w, d) * 0.5, cf * CFrame.new(0, topY + 0.5, 0), accent, Enum.Material.Neon,
+			{ CanCollide = false, Name = "AnelTopo" })
 	end
 end
 
+
 local function createHouse(parent, pos, size)
 	local cf = CFrame.lookAt(pos, V(0, pos.Y, 0))
-	local h = 8 + rng:NextNumber(0, 6)
+	local h = 14 + rng:NextNumber(0, 10)
 	local col = HOUSE_COLORS[rng:NextInteger(1, #HOUSE_COLORS)]
 	local accent = ACCENTS[rng:NextInteger(1, #ACCENTS)]
 	if rng:NextNumber() < 0.5 then
@@ -887,7 +1006,11 @@ local function createTechnologyArea(parent, c)
 	for _, s in ipairs({ V(-40, 0, -40), V(40, 0, -40), V(-40, 0, 40), V(40, 0, 40) }) do
 		createEnergyTower(parent, c + s, 34, C.Vib)
 	end
-	createLab(parent, c + V(0, 0, -52), c, 44, 26, C.Cyan)
+	createLab(parent, c + V(0, 0, -52), c, 44, 26, C.Cyan, "LABORATORIO PRINCIPAL")
+	createLab(parent, c + V(-70, 0, -8), c, 30, 22, C.Vib, "PESQUISA AVANCADA")
+	createLab(parent, c + V(70, 0, -8), c, 30, 22, C.Gold, "ENERGIA E ARMAS")
+	make(parent, V(150, 6, 6), c + V(0, 17, 20), C.Cyan, Enum.Material.Glass,
+		{ Shape = Enum.PartType.Cylinder, Transparency = 0.4, CanCollide = false, Name = "GrandeCorredor" })
 	for i = 0, 5 do
 		local a = PI * 0.15 + i * PI * 0.14
 		local p = c + V(math.cos(a) * 28, 0.9, math.sin(a) * 28)
@@ -994,12 +1117,22 @@ local function createPantherArea(parent, c)
 	reserve(c.X, c.Z, 105)
 end
 
+
 ------------------------------------------------------------------
--- BLOCOS DE CONSTRUCAO DA CIDADE
+-- LAYOUT DO MAPA (coordenadas relativas ao centro de Wakanda)
+-- Norte = -Z : montanhas > campo de batalha > cidade > areas ao sul
 ------------------------------------------------------------------
+local RING_R = 240
+local BC = V(0, 0, -1500)      -- centro do campo de batalha
+local TECH_C = V(-620, 0, 560) -- laboratorios (sudoeste)
+local VIB_C = V(620, 0, 560)   -- vibranium (sudeste)
+local PAN_C = V(0, 0, 1090)    -- area do Pantera Negra (sul)
+local PAD_C = V(190, 0, 330)   -- porto de naves (destino da viagem)
+local PAD_TOP = 1.7
+
 local function ringPt(k)
 	local a = k * PI / 8
-	return V(math.cos(a) * 190, 0, math.sin(a) * 190)
+	return V(math.cos(a) * RING_R, 0, math.sin(a) * RING_R)
 end
 
 local function createRoads(parent, lights)
@@ -1008,93 +1141,895 @@ local function createRoads(parent, lights)
 		ring[k] = ringPt(k)
 	end
 	for k = 0, 15 do
-		createRoad(parent, ring[k], ring[(k + 1) % 16], 26, { Lights = lights, Both = false, Spacing = 80 })
-		cyl(parent, 0.4, 26, ring[k] + V(0, 0.3, 0), C.Road, Enum.Material.Asphalt, { Name = "JuntaAnel" })
+		createRoad(parent, ring[k], ring[(k + 1) % 16], 30, { Lights = lights, Both = false, Spacing = 90 })
+		cyl(parent, 0.4, 30, ring[k] + V(0, 0.3, 0), C.Road, Enum.Material.Asphalt, { Name = "JuntaAnel" })
 	end
 	-- avenidas principais
-	createRoad(parent, V(0, 0, 95), V(0, 0, 480), 44, { Lights = lights, Trees = true })
-	createRoad(parent, V(0, 0, -95), V(0, 0, -410), 34, { Lights = lights, Trees = true })
-	createRoad(parent, V(95, 0, 0), V(480, 0, 0), 34, { Lights = lights, Trees = true })
-	createRoad(parent, V(-95, 0, 0), V(-265, 0, 0), 34, { Lights = lights, Trees = true })
-	createBridge(parent, V(-265, 0, 0), V(-335, 0, 0), 34)
-	createRoad(parent, V(-335, 0, 0), V(-480, 0, 0), 34, { Lights = lights, Trees = true })
-	-- estrada noroeste com ponte
-	createRoad(parent, ring[10], V(-265, 0, -210), 22, { Lights = lights })
-	createBridge(parent, V(-265, 0, -210), V(-335, 0, -251), 22)
-	createRoad(parent, V(-335, 0, -251), V(-440, 0, -312), 22, { Lights = lights })
+	createRoad(parent, V(0, 0, 155), V(0, 0, 900), 50, { Lights = lights, Trees = true, Spacing = 100 })
+	createRoad(parent, V(0, 0, -155), V(0, 0, -1000), 50, { Lights = lights, Trees = true, Spacing = 100 })
+	createRoad(parent, V(155, 0, 0), V(900, 0, 0), 40, { Lights = lights, Trees = true, Spacing = 100 })
+	createRoad(parent, V(-155, 0, 0), V(-750, 0, 0), 40, { Lights = lights, Trees = true, Spacing = 100 })
+	createBridge(parent, V(-750, 0, 0), V(-810, 0, 0), 40)
+	createRoad(parent, V(-810, 0, 0), V(-900, 0, 0), 40, { Lights = lights, Spacing = 100 })
+	-- estrada larga ate o campo de batalha
+	createRoad(parent, V(0, 0, -1000), V(0, 0, -1330), 70, { Lights = lights, Spacing = 110 })
 	-- acessos as areas especiais
-	createRoad(parent, ring[14], V(186, 0, -173), 22, { Lights = lights })
-	createRoad(parent, ring[2], V(200, 0, 190), 22, { Lights = lights })
-	createRoad(parent, ring[11], V(-112, 0, -253), 22, { Lights = lights })
+	createRoad(parent, ring[6], V(-560, 0, 505), 30, { Lights = lights, Spacing = 90 })
+	createRoad(parent, ring[2], V(560, 0, 505), 30, { Lights = lights, Spacing = 90 })
+	createRoad(parent, V(0, 0, 900), PAN_C, 50)
+	createRoad(parent, V(25, 0, 330), PAD_C, 24, { Lights = lights, Both = false, Spacing = 80 })
 	-- rotatorias
 	for _, k in ipairs({ 0, 4, 8, 12 }) do
-		createRoundabout(parent, ring[k], 26)
+		createRoundabout(parent, ring[k], 36)
 	end
-	createRoundabout(parent, V(480, 0, 0), 26)
-	createRoundabout(parent, V(0, 0, 480), 26)
-	createRoundabout(parent, V(-480, 0, 0), 26)
+	createRoundabout(parent, V(900, 0, 0), 36)
+	createRoundabout(parent, V(0, 0, 900), 36)
+	createRoundabout(parent, V(-900, 0, 0), 36)
 end
 
+local function createLandingPad(parent, c)
+	cyl(parent, 1, 130, c + V(0, 0.8, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PistaNaves" })
+	cyl(parent, 0.2, 124, c + V(0, 1.35, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "AnelPista" })
+	cyl(parent, 0.25, 118, c + V(0, 1.4, 0), C.Metal, Enum.Material.Metal, { Name = "PisoPista" })
+	cyl(parent, 0.2, 60, c + V(0, 1.55, 0), C.Cyan, Enum.Material.Neon, { CanCollide = false, Name = "AnelCentral" })
+	local mark = cyl(parent, 0.25, 54, c + V(0, 1.6, 0), C.Metal, Enum.Material.Metal, { Name = "MarcaPouso" })
+	addLabel(mark, Enum.NormalId.Right, "PORTO DE NAVES", C.Cyan)
+	for k = 0, 7 do
+		local a = k * PI / 4
+		local p = c + V(math.cos(a) * 58, 0, math.sin(a) * 58)
+		cyl(parent, 12, 2.2, p + V(0, 7, 0), C.Metal, Enum.Material.Metal, { Name = "PilarPista" })
+		local orb = ball(parent, V(3, 3, 3), p + V(0, 13.5, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		if k % 2 == 0 then
+			addLight(orb, C.Vib, 30, 1.2)
+		end
+	end
+	reserve(c.X, c.Z, 75)
+end
+
+------------------------------------------------------------------
+-- CIDADE: aneis de predios gigantes (altos no centro, baixos nas bordas)
+------------------------------------------------------------------
 local function createCity(parent)
 	local bands = {
-		{ r = 125, hMin = 70, hMax = 120, kind = "sky" },
-		{ r = 160, hMin = 50, hMax = 95, kind = "sky" },
-		{ r = 225, hMin = 28, hMax = 62, kind = "mid" },
-		{ r = 262, hMin = 24, hMax = 50, kind = "mid" },
-		{ r = 298, hMin = 18, hMax = 40, kind = "mid" },
-		{ r = 335, hMin = 12, hMax = 28, kind = "house" },
-		{ r = 370, hMin = 10, hMax = 22, kind = "house" },
+		{ r = 300, sp = 100, kind = "sky", w = { 40, 56 }, h = { 220, 330 } },
+		{ r = 365, sp = 100, kind = "sky", w = { 38, 52 }, h = { 170, 270 } },
+		{ r = 430, sp = 90, kind = "mid", w = { 32, 44 }, h = { 110, 200 } },
+		{ r = 495, sp = 80, kind = "mid", w = { 28, 38 }, h = { 70, 140 } },
+		{ r = 555, sp = 72, kind = "house", w = { 24, 30 }, h = { 40, 80 } },
 	}
 	local styles = { "spire", "dome", "plain" }
 	for bi, band in ipairs(bands) do
-		local n = math.floor(2 * PI * band.r / 48)
+		local n = math.floor(2 * PI * band.r / band.sp)
 		for i = 0, n - 1 do
-			local ang = (i / n) * 2 * PI + bi * 0.2 + rng:NextNumber(-0.03, 0.03)
-			local x = math.cos(ang) * band.r + rng:NextNumber(-4, 4)
-			local z = math.sin(ang) * band.r + rng:NextNumber(-4, 4)
-			if math.abs(x) >= 42 and math.abs(z) >= 42 and not blocked(x, z, 18) then
-				local pos = V(x, 0.3, z)
+			local ang = (i / n) * 2 * PI + bi * 0.23 + rng:NextNumber(-0.02, 0.02)
+			local x = math.cos(ang) * band.r + rng:NextNumber(-5, 5)
+			local z = math.sin(ang) * band.r + rng:NextNumber(-5, 5)
+			if not blocked(x, z, 26) then
 				local roll = rng:NextNumber()
-				if band.kind == "sky" then
-					createBuilding(parent, pos, rng:NextNumber(20, 30), rng:NextNumber(20, 30),
-						rng:NextNumber(band.hMin, band.hMax), styles[rng:NextInteger(1, 3)])
-				elseif band.kind == "mid" then
-					if roll < 0.45 then
-						createHouse(parent, pos, rng:NextNumber(10, 14))
-					else
-						createBuilding(parent, pos, rng:NextNumber(14, 22), rng:NextNumber(14, 22),
-							rng:NextNumber(band.hMin, band.hMax), "plain")
-					end
+				local houseChance = (band.kind == "sky" and 0) or (band.kind == "mid" and 0.3) or 0.7
+				if roll < houseChance then
+					local s = 1.8
+					withScale(s, nil, function()
+						createHouse(parent, V(x / s, 0.3 / s, z / s), rng:NextNumber(10, 13))
+					end)
+					reserve(x, z, 24)
 				else
-					if roll < 0.8 then
-						createHouse(parent, pos, rng:NextNumber(10, 14))
-					else
-						createBuilding(parent, pos, rng:NextNumber(12, 16), rng:NextNumber(12, 16),
-							rng:NextNumber(band.hMin, band.hMax), "plain")
-					end
+					local w = rng:NextNumber(band.w[1], band.w[2])
+					local d = rng:NextNumber(band.w[1], band.w[2])
+					local style = band.kind == "sky" and styles[rng:NextInteger(1, 3)] or "plain"
+					createBuilding(parent, V(x, 0.3, z), w, d, rng:NextNumber(band.h[1], band.h[2]), style)
+					reserve(x, z, math.max(w, d) * 0.9)
 				end
-				reserve(x, z, 14)
 			end
 		end
 	end
 end
+
+local function createDistricts(F)
+	-- centros comerciais e feiras (escala maior)
+	for _, p in ipairs({ V(330, 0, 150), V(-330, 0, 140), V(120, 0, -330) }) do
+		if not blocked(p.X, p.Z, 30) then
+			local s = 1.7
+			withScale(s, nil, function()
+				createMall(F.Cidade, V(p.X / s, 0.3 / s, p.Z / s))
+			end)
+		end
+	end
+	for _, p in ipairs({ V(-120, 0, 360), V(430, 0, -120), V(-400, 0, -250) }) do
+		if not blocked(p.X, p.Z, 26) then
+			local s = 1.7
+			withScale(s, nil, function()
+				createMarket(F.Cidade, V(p.X / s, 0, p.Z / s))
+			end)
+		end
+	end
+end
+
+
+------------------------------------------------------------------
+-- CAMPO DE BATALHA (inspirado na savana de Wakanda de Guerra Infinita)
+------------------------------------------------------------------
+local FIELD_R = 520
+
+local function createRockCluster(parent, pos, s)
+	local col = ROCKS[rng:NextInteger(1, #ROCKS)]
+	for i = 1, rng:NextInteger(2, 3) do
+		local sz = V(s * rng:NextNumber(0.9, 1.5), s * rng:NextNumber(0.7, 1.6), s * rng:NextNumber(0.9, 1.5))
+		local cf = CFrame.new(pos + V(rng:NextNumber(-1, 1) * s * 0.8, sz.Y * 0.35, rng:NextNumber(-1, 1) * s * 0.8))
+			* CFrame.Angles(rng:NextNumber(-0.3, 0.3), rng:NextNumber(0, PI), rng:NextNumber(-0.3, 0.3))
+		make(parent, sz, cf, col:Lerp(C.Stone, rng:NextNumber(0, 0.4)), Enum.Material.Rock,
+			{ Name = "Rocha", Shadow = s > 8 })
+	end
+end
+
+local function createRockSpire(parent, pos, h, w)
+	local col = ROCKS[rng:NextInteger(1, #ROCKS)]
+	local yaw = rng:NextNumber(0, PI)
+	for i = 1, 3 do
+		local f = (i - 1) / 3
+		local sw = w * (1 - f * 0.55)
+		local sh = h / 3
+		local cf = CFrame.new(pos + V(rng:NextNumber(-2, 2), sh * (i - 0.5), rng:NextNumber(-2, 2)))
+			* CFrame.Angles(rng:NextNumber(-0.08, 0.08), yaw + i * 0.4, rng:NextNumber(-0.08, 0.08))
+		make(parent, V(sw, sh + 2, sw * 0.8), cf, col:Lerp(Color3.fromRGB(150, 140, 128), f * 0.5),
+			Enum.Material.Rock, { Name = "Formacao", Shadow = true })
+	end
+end
+
+local function createCrater(parent, pos, r, y)
+	cyl(parent, 0.15, r * 2, pos + V(0, y, 0), Color3.fromRGB(70, 56, 44), Enum.Material.Ground,
+		{ CanCollide = false, Name = "Cratera" })
+	cyl(parent, 0.15, r * 1.2, pos + V(0, y + 0.03, 0), Color3.fromRGB(46, 38, 32), Enum.Material.Ground,
+		{ CanCollide = false, Name = "CrateraInterna" })
+end
+
+local function createWatchtower(parent, pos)
+	cyl(parent, 64, 8, pos + V(0, 32.4, 0), C.Metal, Enum.Material.Metal, { Name = "TorreVigia" })
+	cyl(parent, 3, 20, pos + V(0, 65, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PlataformaVigia" })
+	cyl(parent, 0.8, 21, pos + V(0, 66.6, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "AnelVigia" })
+	for _, a in ipairs({ 0, PI / 2, PI, PI * 1.5 }) do
+		make(parent, V(0.6, 8, 0.6), pos + V(math.cos(a) * 9, 71, math.sin(a) * 9), C.Metal, Enum.Material.Metal,
+			{ CanCollide = false, Name = "GradeVigia" })
+	end
+	local orb = ball(parent, V(6, 6, 6), pos + V(0, 76, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	addLight(orb, C.Vib, 50, 1.5)
+end
+
+local function createGate(parent, z)
+	for _, s in ipairs({ -1, 1 }) do
+		make(parent, V(16, 90, 16), V(s * 56, 46, z), C.DarkMetal, Enum.Material.Metal, { Shadow = true, Name = "PilarPortao" })
+		make(parent, V(1.2, 80, 0.6), V(s * 56, 46, z + 8.3), C.Vib, Enum.Material.Neon, { CanCollide = false })
+		ball(parent, V(10, 10, 10), V(s * 56, 96, z), C.Vib, Enum.Material.Neon, { CanCollide = false })
+	end
+	make(parent, V(128, 12, 18), V(0, 94, z), C.DarkMetal, Enum.Material.Metal, { Shadow = true, Name = "LintelPortao" })
+	make(parent, V(128.6, 1, 18.6), V(0, 100.5, z), C.Gold, Enum.Material.Neon, { CanCollide = false })
+	local sign = make(parent, V(100, 7, 1), V(0, 94, z + 9.4), C.Black, Enum.Material.Metal, { Name = "PlacaPortao" })
+	addLabel(sign, Enum.NormalId.Back, "CAMPO DE BATALHA DE WAKANDA", C.Gold)
+end
+
+local function createBattlefield(F)
+	local g = F.Campo
+
+	-- grande planicie de savana
+	cyl(g, 0.4, FIELD_R * 2, BC + V(0, 0.2, 0), Color3.fromRGB(96, 136, 60), Enum.Material.Grass, { Name = "CampoGrama" })
+	local tones = {
+		Color3.fromRGB(122, 150, 66), Color3.fromRGB(82, 120, 56),
+		Color3.fromRGB(140, 152, 74), Color3.fromRGB(108, 128, 58),
+	}
+	for i = 1, 16 do
+		local a = rng:NextNumber(0, 2 * PI)
+		local r = FIELD_R * math.sqrt(rng:NextNumber(0.05, 0.85))
+		cyl(g, 0.1, rng:NextNumber(110, 230), BC + V(math.cos(a) * r, 0.42 + i * 0.012, math.sin(a) * r),
+			tones[(i % #tones) + 1], Enum.Material.Grass, { CanCollide = false, Name = "Mancha" })
+	end
+
+	-- area central ampla de combate
+	cyl(g, 0.2, 340, BC + V(0, 0.55, 0), Color3.fromRGB(150, 118, 84), Enum.Material.Ground, { Name = "ArenaTerra" })
+	cyl(g, 0.2, 250, BC + V(0, 0.65, 0), Color3.fromRGB(132, 104, 76), Enum.Material.Ground, { Name = "ArenaTerra2" })
+	cyl(g, 0.2, 90, BC + V(0, 0.8, 0), C.Stone, Enum.Material.Slate, { Name = "PlataformaCentral" })
+	local map = make(g, V(60, 1, 60), BC + V(0, 1.2, 0), C.DarkMetal, Enum.Material.Metal, { Name = "MapaMundiCentral" })
+	addMap(map, Enum.NormalId.Top)
+	make(g, V(62, 0.3, 62), BC + V(0, 1.75, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "BordaMapa" })
+	for k = 0, 3 do
+		local a = k * PI / 2 + PI / 4
+		createStele(g, BC + V(math.cos(a) * 62, 0.9, math.sin(a) * 62), 12, 14, -a + PI / 2)
+	end
+	for i = 1, 14 do
+		local a = rng:NextNumber(0, 2 * PI)
+		local r = rng:NextNumber(70, FIELD_R * 0.9)
+		createCrater(g, BC + V(math.cos(a) * r, 0, math.sin(a) * r), rng:NextNumber(12, 30), r < 170 and 0.9 or 0.5)
+	end
+
+	-- pontos aleatorios fora da arena e fora da estrada
+	local function samplePoint(rMin, rMax, y)
+		for _ = 1, 12 do
+			local a = rng:NextNumber(0, 2 * PI)
+			local r = math.sqrt(rng:NextNumber(rMin * rMin, rMax * rMax))
+			local x, z = math.cos(a) * r, math.sin(a) * r
+			if not (math.abs(x) < 40 and z > 100) then
+				return V(BC.X + x, y, BC.Z + z)
+			end
+		end
+		return nil
+	end
+
+	-- vegetacao espalhada
+	for i = 1, 70 do
+		local p = samplePoint(190, FIELD_R - 20, 0.4)
+		if p then
+			createTree(g, p, rng:NextNumber(1.3, 2.2), (i % 3 == 0) and 3 or 1)
+		end
+	end
+	for _ = 1, 50 do
+		local p = samplePoint(120, FIELD_R - 10, 0.4)
+		if p then
+			createBush(g, p, rng:NextNumber(1.4, 2.4))
+		end
+	end
+
+	-- rochas e obstaculos naturais
+	for _ = 1, 46 do
+		local p = samplePoint(110, FIELD_R - 15, 0.4)
+		if p then
+			createRockCluster(g, p, rng:NextNumber(5, 13))
+		end
+	end
+	for i = 1, 14 do
+		local a = i / 14 * 2 * PI + rng:NextNumber(-0.15, 0.15)
+		local r = FIELD_R + rng:NextNumber(-60, 20)
+		local x, z = math.cos(a) * r, math.sin(a) * r
+		if not (math.abs(x) < 70 and z > 0) then
+			createRockSpire(g, V(BC.X + x, 0.4, BC.Z + z), rng:NextNumber(40, 85), rng:NextNumber(22, 36))
+		end
+	end
+
+	-- estruturas de Wakanda perto do campo
+	createGate(g, -1000)
+	for k = 0, 5 do
+		local a = PI * 0.12 + k * PI * 0.152 -- arco voltado para a cidade
+		createWatchtower(g, BC + V(math.cos(a) * (FIELD_R - 30), 0.4, math.sin(a) * (FIELD_R - 30)))
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		local labPos = V(s * 400, 0.4, -1200)
+		withScale(1.6, labPos, function()
+			createLab(g, Vector3.zero, (BC - labPos), 44, 28, s < 0 and C.Cyan or C.Vib, "POSTO DE COMANDO")
+		end)
+		createVehicle(g, V(s * 230, 5, -1170), s * 0.5, C.Vib)
+		createVehicle(g, V(s * 300, 5, -1790), s * -0.4, C.Cyan)
+		createEnergyTower(g, V(s * 300, 0.4, -1330), 96, C.Cyan)
+		createEnergyTower(g, V(s * 440, 0.4, -1520), 110, C.Vib)
+	end
+
+	-- horizonte: torres e predios de Wakanda ao fundo
+	for i = 0, 6 do
+		local x = -600 + i * 200 + rng:NextNumber(-25, 25)
+		createBuilding(g, V(x, 0.3, -2000 + rng:NextNumber(-30, 30)), 46, 46, rng:NextNumber(230, 360),
+			(i % 2 == 0) and "spire" or "dome")
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		withScale(3, V(s * 340, 0.3, -1960), function()
+			createEnergyTower(g, Vector3.zero, 90, C.Vib)
+		end)
+	end
+	reserve(BC.X, BC.Z, FIELD_R + 40)
+end
+
+local function createFieldMountains(parent)
+	-- parede de fundo
+	for i = 0, 8 do
+		createMountain(parent, V(-1000 + i * 250 + rng:NextNumber(-30, 30), 0, -2270 + rng:NextNumber(-40, 30)),
+			rng:NextNumber(380, 460), rng:NextNumber(340, 520), true)
+	end
+	-- cordilheiras laterais
+	for _, s in ipairs({ -1, 1 }) do
+		for _, z in ipairs({ -1050, -1330, -1610, -1890, -2100 }) do
+			createMountain(parent, V(s * (680 + rng:NextNumber(-40, 60)), 0, z + rng:NextNumber(-30, 30)),
+				rng:NextNumber(340, 420), rng:NextNumber(260, 420), true)
+		end
+		createMountain(parent, V(s * 420, 0, -930), rng:NextNumber(240, 280), rng:NextNumber(130, 170), false)
+		createMountain(parent, V(s * 1050, 0, -780), rng:NextNumber(320, 380), rng:NextNumber(220, 300), true)
+		createMountain(parent, V(s * 1250, 0, -1250), rng:NextNumber(340, 400), rng:NextNumber(260, 360), true)
+		createMountain(parent, V(s * 1300, 0, -1750), rng:NextNumber(340, 400), rng:NextNumber(280, 380), true)
+	end
+end
+
+
+------------------------------------------------------------------
+-- PORTAL DE VIAGEM PARA WAKANDA (terminal + nave + animacao)
+------------------------------------------------------------------
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local PORTAL_POS = Vector3.new(-623, 4, 347)
+local DEST = CENTER + PAD_C + V(0, PAD_TOP, 0) -- centro da pista de pouso em Wakanda (mundo)
+local wakandaReady = false
+local traveling = false
+local localPlayer = Players.LocalPlayer
+local ui = {}
+local promptRef = nil
+
+local function smooth(t)
+	return t * t * (3 - 2 * t)
+end
+
+local function easeOut(t)
+	return 1 - (1 - t) ^ 3
+end
+
+-- peca absoluta (coordenadas de mundo, sem escala nem offset)
+local function sp(parent, size, cf, color, material, opts)
+	opts = opts or {}
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = opts.CanQuery == true
+	p.CastShadow = false
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.Transparency = opts.Transparency or 0
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Name = opts.Name or "Part"
+	if opts.Shape then
+		p.Shape = opts.Shape
+	end
+	p.Parent = parent
+	return p
+end
+
+local VERT = CFrame.Angles(0, 0, PI / 2) -- cilindro em pe
+
+------------------------------------------------------------------
+-- INTERFACE
+------------------------------------------------------------------
+local function buildUI()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "WakandaTravelUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 50
+	gui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+	local fade = Instance.new("Frame")
+	fade.Size = UDim2.fromScale(1, 1)
+	fade.BackgroundColor3 = Color3.new(0, 0, 0)
+	fade.BackgroundTransparency = 1
+	fade.BorderSizePixel = 0
+	fade.ZIndex = 20
+	fade.Active = false
+	fade.Parent = gui
+
+	local function bar(anchorY, posY)
+		local f = Instance.new("Frame")
+		f.AnchorPoint = Vector2.new(0, anchorY)
+		f.Position = UDim2.fromScale(0, posY)
+		f.Size = UDim2.fromScale(1, 0)
+		f.BackgroundColor3 = Color3.new(0, 0, 0)
+		f.BorderSizePixel = 0
+		f.ZIndex = 18
+		f.Parent = gui
+		return f
+	end
+	ui.top = bar(0, 0)
+	ui.bottom = bar(1, 1)
+
+	local status = Instance.new("TextLabel")
+	status.AnchorPoint = Vector2.new(0.5, 0)
+	status.Position = UDim2.fromScale(0.5, 0.13)
+	status.Size = UDim2.fromOffset(420, 40)
+	status.BackgroundTransparency = 1
+	status.TextColor3 = Color3.fromRGB(235, 215, 255)
+	status.TextStrokeTransparency = 0.3
+	status.TextStrokeColor3 = Color3.fromRGB(80, 30, 160)
+	status.TextScaled = true
+	status.Font = Enum.Font.GothamBold
+	status.Text = ""
+	status.TextTransparency = 1
+	status.ZIndex = 25
+	status.Parent = gui
+
+	local btn = Instance.new("TextButton")
+	btn.AnchorPoint = Vector2.new(0.5, 1)
+	btn.Position = UDim2.new(0.5, 0, 1, -110)
+	btn.Size = UDim2.fromOffset(320, 72)
+	btn.BackgroundColor3 = Color3.fromRGB(88, 36, 190)
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.TextScaled = true
+	btn.Font = Enum.Font.GothamBold
+	btn.Text = "🚀 VIAJAR PARA WAKANDA"
+	btn.AutoButtonColor = true
+	btn.Visible = false
+	btn.ZIndex = 30
+	btn.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 18)
+	corner.Parent = btn
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(80, 220, 255)
+	stroke.Thickness = 3
+	stroke.Parent = btn
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 12)
+	pad.PaddingRight = UDim.new(0, 12)
+	pad.PaddingTop = UDim.new(0, 10)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.Parent = btn
+
+	ui.gui, ui.fade, ui.status, ui.button = gui, fade, status, btn
+end
+
+local function say(text, hold)
+	if not ui.status then
+		return
+	end
+	ui.status.Text = text
+	TweenService:Create(ui.status, TweenInfo.new(0.3), { TextTransparency = 0 }):Play()
+	task.delay(hold or 2.6, function()
+		if ui.status and ui.status.Text == text then
+			TweenService:Create(ui.status, TweenInfo.new(0.5), { TextTransparency = 1 }):Play()
+		end
+	end)
+end
+
+local function fadeTo(alpha, t)
+	local tw = TweenService:Create(ui.fade, TweenInfo.new(t, Enum.EasingStyle.Sine), { BackgroundTransparency = alpha })
+	tw:Play()
+	tw.Completed:Wait()
+end
+
+local function letterbox(on)
+	local size = UDim2.fromScale(1, on and 0.1 or 0)
+	TweenService:Create(ui.top, TweenInfo.new(0.6), { Size = size }):Play()
+	TweenService:Create(ui.bottom, TweenInfo.new(0.6), { Size = size }):Play()
+end
+
+------------------------------------------------------------------
+-- TERMINAL FUTURISTA
+------------------------------------------------------------------
+local function findGround(pos)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local ex = {}
+	if localPlayer.Character then
+		table.insert(ex, localPlayer.Character)
+	end
+	local old = workspace:FindFirstChild("WakandaPortal")
+	if old then
+		table.insert(ex, old)
+	end
+	params.FilterDescendantsInstances = ex
+	local r = workspace:Raycast(pos + Vector3.new(0, 40, 0), Vector3.new(0, -140, 0), params)
+	return r and r.Position.Y or nil
+end
+
+local portalGroundY = PORTAL_POS.Y - 4
+
+local function createPortalTerminal()
+	local old = workspace:FindFirstChild("WakandaPortal")
+	if old then
+		old:Destroy()
+	end
+	local F = Instance.new("Folder")
+	F.Name = "WakandaPortal"
+	F.Parent = workspace
+
+	local gy = findGround(PORTAL_POS) or (PORTAL_POS.Y - 4)
+	local by = math.max(PORTAL_POS.Y, gy + 3.5) -- altura do botao (Y = 4 pedido)
+	portalGroundY = gy
+	local bp = Vector3.new(PORTAL_POS.X, by, PORTAL_POS.Z)
+	local metal = Color3.fromRGB(34, 32, 48)
+
+	-- base e pedestal
+	sp(F, Vector3.new(1, 30, 30), CFrame.new(bp.X, gy + 0.5, bp.Z) * VERT, metal, Enum.Material.Metal,
+		{ Shape = Enum.PartType.Cylinder, Name = "BaseTerminal", CanQuery = true }).CanCollide = true
+	sp(F, Vector3.new(0.3, 31, 31), CFrame.new(bp.X, gy + 1.05, bp.Z) * VERT, C.Cyan, Enum.Material.Neon,
+		{ Shape = Enum.PartType.Cylinder, Name = "AnelBase" })
+	sp(F, Vector3.new(0.3, 22, 22), CFrame.new(bp.X, gy + 1.1, bp.Z) * VERT, C.Vib, Enum.Material.Neon,
+		{ Shape = Enum.PartType.Cylinder, Name = "AnelInterno" })
+	local ph = by - 1.8 - gy
+	sp(F, Vector3.new(ph, 5, 5), CFrame.new(bp.X, gy + ph / 2, bp.Z) * VERT, metal, Enum.Material.Metal,
+		{ Shape = Enum.PartType.Cylinder, Name = "Pedestal", CanQuery = true }).CanCollide = true
+	sp(F, Vector3.new(11, 2.4, 7), CFrame.new(bp.X, by - 1.6, bp.Z), C.Metal, Enum.Material.Metal,
+		{ Name = "Console", CanQuery = true }).CanCollide = true
+	sp(F, Vector3.new(11.4, 0.3, 7.4), CFrame.new(bp.X, by - 0.3, bp.Z), C.Cyan, Enum.Material.Neon, { Name = "BordaConsole" })
+
+	-- botao
+	local button = sp(F, Vector3.new(1.2, 4.4, 4.4), CFrame.new(bp) * VERT * CFrame.new(0, 0, 0) + Vector3.new(0, 0.2, 0),
+		C.Vib, Enum.Material.Neon, { Shape = Enum.PartType.Cylinder, Name = "BotaoWakanda", CanQuery = true })
+	button.CanCollide = true
+
+	-- painel com o texto (visivel dos dois lados)
+	local panelCF = CFrame.new(bp.X, by + 8.2, bp.Z)
+	local panel = sp(F, Vector3.new(18, 8, 0.8), panelCF, Color3.fromRGB(18, 16, 30), Enum.Material.Metal,
+		{ Name = "PainelTerminal", CanQuery = true })
+	for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+		local g = Instance.new("SurfaceGui")
+		g.Face = face
+		g.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		g.PixelsPerStud = 40
+		g.LightInfluence = 0
+		g.Parent = panel
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.fromScale(1, 1)
+		t.BackgroundTransparency = 1
+		t.Text = "🚀 VIAJAR PARA WAKANDA"
+		t.TextScaled = true
+		t.Font = Enum.Font.GothamBold
+		t.TextColor3 = Color3.fromRGB(226, 172, 60)
+		t.Parent = g
+		local pd = Instance.new("UIPadding")
+		pd.PaddingLeft = UDim.new(0, 20)
+		pd.PaddingRight = UDim.new(0, 20)
+		pd.PaddingTop = UDim.new(0, 30)
+		pd.PaddingBottom = UDim.new(0, 30)
+		pd.Parent = t
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		sp(F, Vector3.new(0.8, 5, 0.8), CFrame.new(bp.X + s * 7, by + 1.8, bp.Z), C.Metal, Enum.Material.Metal, { Name = "Poste" })
+		sp(F, Vector3.new(0.5, 8.6, 1), CFrame.new(bp.X + s * 9.2, by + 8.2, bp.Z), C.Vib, Enum.Material.Neon, { Name = "MoldeLateral" })
+	end
+	sp(F, Vector3.new(19, 0.5, 1), CFrame.new(bp.X, by + 12.5, bp.Z), C.Vib, Enum.Material.Neon, { Name = "MoldeTopo" })
+	sp(F, Vector3.new(19, 0.5, 1), CFrame.new(bp.X, by + 3.9, bp.Z), C.Vib, Enum.Material.Neon, { Name = "MoldeBase" })
+
+	-- feixe de luz visivel de longe
+	sp(F, Vector3.new(220, 3, 3), CFrame.new(bp.X, by + 110, bp.Z) * VERT, C.Vib, Enum.Material.Neon,
+		{ Shape = Enum.PartType.Cylinder, Transparency = 0.55, Name = "Feixe" })
+	sp(F, Vector3.new(220, 7, 7), CFrame.new(bp.X, by + 110, bp.Z) * VERT, C.VibLight, Enum.Material.Neon,
+		{ Shape = Enum.PartType.Cylinder, Transparency = 0.85, Name = "FeixeExterno" })
+
+	-- letreiro flutuante
+	local bb = Instance.new("BillboardGui")
+	bb.Adornee = panel
+	bb.Size = UDim2.fromOffset(260, 46)
+	bb.StudsOffset = Vector3.new(0, 7.5, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 600
+	bb.LightInfluence = 0
+	bb.Parent = panel
+	local bl = Instance.new("TextLabel")
+	bl.Size = UDim2.fromScale(1, 1)
+	bl.BackgroundTransparency = 1
+	bl.Text = "🚀 VIAJAR PARA WAKANDA"
+	bl.TextScaled = true
+	bl.Font = Enum.Font.GothamBold
+	bl.TextColor3 = Color3.fromRGB(235, 215, 255)
+	bl.TextStrokeTransparency = 0.2
+	bl.TextStrokeColor3 = Color3.fromRGB(70, 20, 150)
+	bl.Parent = bb
+
+	-- luz e efeitos
+	local light = Instance.new("PointLight")
+	light.Color = C.Vib
+	light.Range = 40
+	light.Brightness = 2
+	light.Shadows = false
+	light.Parent = button
+	TweenService:Create(light, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Brightness = 5 }):Play()
+	TweenService:Create(button, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Color = C.VibLight }):Play()
+	local pe = Instance.new("ParticleEmitter")
+	pe.Rate = 14
+	pe.Lifetime = NumberRange.new(1.2, 2.2)
+	pe.Speed = NumberRange.new(3, 7)
+	pe.SpreadAngle = Vector2.new(25, 25)
+	pe.Size = NumberSequence.new(0.5, 0)
+	pe.LightEmission = 1
+	pe.Color = ColorSequence.new(C.VibLight, C.Cyan)
+	pe.Transparency = NumberSequence.new(0.2, 1)
+	pe.EmissionDirection = Enum.NormalId.Top
+	pe.Parent = button
+
+	-- interacao: ProximityPrompt (celular e PC) + ClickDetector (toque direto)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Viajar para Wakanda"
+	prompt.ObjectText = "Terminal de Wakanda"
+	prompt.HoldDuration = 0.4
+	prompt.MaxActivationDistance = 22
+	prompt.RequiresLineOfSight = false
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.Parent = button
+	promptRef = prompt
+	local cd = Instance.new("ClickDetector")
+	cd.MaxActivationDistance = 26
+	cd.Parent = button
+	return prompt, cd
+end
+
+------------------------------------------------------------------
+-- NAVE DE WAKANDA
+------------------------------------------------------------------
+local SEAT_LOCAL = CFrame.new(0, 5.8, 5)
+
+local function buildShip(cf)
+	local m = Instance.new("Model")
+	m.Name = "NaveWakanda"
+	local hullCol = Color3.fromRGB(52, 50, 72)
+	local function part(size, off, color, mat, opts)
+		return sp(m, size, cf * off, color, mat, opts)
+	end
+	local hull = part(Vector3.new(30, 8, 44), CFrame.new(0, -1.5, 0), hullCol, Enum.Material.Metal,
+		{ Shape = Enum.PartType.Ball, Name = "Casco" })
+	part(Vector3.new(24, 3, 36), CFrame.new(0, -5, 0), C.Black, Enum.Material.Metal, { Shape = Enum.PartType.Ball })
+	part(Vector3.new(12, 0.6, 12), CFrame.new(0, 2.7, 6), C.Metal, Enum.Material.Metal, { Name = "Deck" })
+	part(Vector3.new(12, 6, 16), CFrame.new(0, 3, -10), C.Cyan, Enum.Material.Glass,
+		{ Shape = Enum.PartType.Ball, Transparency = 0.4, Name = "Cabine" })
+	part(Vector3.new(16, 10, 15), CFrame.new(0, 5.5, 6), C.Cyan, Enum.Material.Glass,
+		{ Shape = Enum.PartType.Ball, Transparency = 0.55, Name = "Domo" })
+	part(Vector3.new(1, 0.4, 18), CFrame.new(0, 2.6, -12), C.Vib, Enum.Material.Neon, { Name = "Espinha" })
+	for _, s in ipairs({ -1, 1 }) do
+		part(Vector3.new(16, 0.8, 14), CFrame.new(s * 20, -1, 8) * CFrame.Angles(0, -s * 0.35, s * 0.08), hullCol,
+			Enum.Material.Metal, { Name = "Asa" })
+		part(Vector3.new(3, 3, 3), CFrame.new(s * 27, -1, 12), C.Vib, Enum.Material.Neon,
+			{ Shape = Enum.PartType.Ball, Name = "PontaAsa" })
+		part(Vector3.new(0.8, 9, 10), CFrame.new(s * 8, 5, 18) * CFrame.Angles(0, 0, -s * 0.2), C.DarkMetal,
+			Enum.Material.Metal, { Name = "Deriva" })
+		local eng = part(Vector3.new(7, 7, 7), CFrame.new(s * 9, -1, 21), C.Vib, Enum.Material.Neon,
+			{ Shape = Enum.PartType.Ball, Name = "Motor" })
+		local pe = Instance.new("ParticleEmitter")
+		pe.Rate = 70
+		pe.Lifetime = NumberRange.new(0.4, 0.9)
+		pe.Speed = NumberRange.new(30, 48)
+		pe.SpreadAngle = Vector2.new(6, 6)
+		pe.Size = NumberSequence.new(3.2, 0.4)
+		pe.LightEmission = 1
+		pe.Color = ColorSequence.new(C.VibLight, C.Cyan)
+		pe.Transparency = NumberSequence.new(0.1, 1)
+		pe.EmissionDirection = Enum.NormalId.Back
+		pe.Parent = eng
+		local l = Instance.new("PointLight")
+		l.Color = C.Vib
+		l.Range = 30
+		l.Brightness = 3
+		l.Shadows = false
+		l.Parent = eng
+	end
+	part(Vector3.new(0.6, 34, 34), CFrame.new(0, -6.2, 0) * VERT, C.Cyan, Enum.Material.Neon,
+		{ Shape = Enum.PartType.Cylinder, Transparency = 0.3, Name = "AnelLevitacao" })
+	local ramp = part(Vector3.new(8, 0.6, 16), CFrame.new(0, -1.3, 28) * CFrame.Angles(0.49, 0, 0), C.Metal,
+		Enum.Material.Metal, { Name = "Rampa" })
+	m.PrimaryPart = hull
+	m.Parent = workspace
+	return m, ramp
+end
+
+local function createCloud(parent, pos)
+	for _ = 1, 3 do
+		local s = rng:NextNumber(90, 200)
+		sp(parent, Vector3.new(s, s * 0.5, s), CFrame.new(pos + Vector3.new(rng:NextNumber(-60, 60),
+			rng:NextNumber(-20, 20), rng:NextNumber(-60, 60))), Color3.fromRGB(245, 248, 255),
+			Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Ball, Transparency = 0.45, Name = "Nuvem" })
+	end
+end
+
+------------------------------------------------------------------
+-- VIAGEM
+------------------------------------------------------------------
+local function animate(dur, fn)
+	local t = 0
+	while t < dur do
+		local dt = RunService.RenderStepped:Wait()
+		t = math.min(t + dt, dur)
+		fn(t / dur, dt)
+	end
+end
+
+local function travel()
+	if traveling then
+		return
+	end
+	if not wakandaReady then
+		say("Wakanda ainda esta sendo construida... aguarde alguns segundos.", 3.2)
+		return
+	end
+	local char = localPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not (hum and root and hum.Health > 0) then
+		return
+	end
+	traveling = true
+	if promptRef then
+		promptRef.Enabled = false
+	end
+	ui.button.Visible = false
+
+	local cam = workspace.CurrentCamera
+	local oldFov = cam.FieldOfView
+	local ship, ramp, clouds, follow
+	local shipCF = CFrame.new()
+
+	local ok, err = pcall(function()
+		-- 1) transicao e criacao da nave perto do jogador
+		fadeTo(0, 0.45)
+		local pos0 = Vector3.new(PORTAL_POS.X + 38, portalGroundY + 5, PORTAL_POS.Z)
+		local flat = Vector3.new(DEST.X - pos0.X, 0, DEST.Z - pos0.Z)
+		local heading = flat.Unit
+		shipCF = CFrame.lookAt(pos0, pos0 + heading)
+		ship, ramp = buildShip(shipCF)
+		cam.CameraType = Enum.CameraType.Scriptable
+		cam.CFrame = CFrame.lookAt(pos0 + Vector3.new(-30, 22, -34), pos0)
+		cam.FieldOfView = 70
+		letterbox(true)
+		hum.PlatformStand = true
+		task.wait(0.15)
+		fadeTo(1, 0.5)
+		say("Iniciando viagem para Wakanda...", 2.4)
+
+		-- 2) o jogador entra na nave
+		local startCF = root.CFrame
+		local seatCF = shipCF * SEAT_LOCAL
+		animate(1.5, function(s)
+			root.CFrame = startCF:Lerp(seatCF, smooth(s))
+			root.AssemblyLinearVelocity = Vector3.zero
+			cam.CFrame = CFrame.lookAt(pos0 + Vector3.new(-30, 22, -34), shipCF.Position)
+		end)
+		follow = RunService.Heartbeat:Connect(function()
+			root.CFrame = shipCF * SEAT_LOCAL
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+		end)
+		ramp.Transparency = 1
+		say("Decolando...", 2.2)
+
+		-- 3) decolagem suave
+		local p1 = pos0 + Vector3.new(0, 95, 0) + heading * 70
+		animate(3.4, function(s)
+			local pos = pos0:Lerp(p1, smooth(s))
+			shipCF = CFrame.lookAt(pos, pos + heading + Vector3.new(0, 0.18 * math.sin(s * PI), 0))
+			ship:PivotTo(shipCF)
+			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(-34 + 20 * s, 14 + 10 * s, 62)).Position, pos)
+		end)
+
+		-- 4) voo ate Wakanda
+		local p2 = DEST + Vector3.new(0, 230, 0)
+		local dist = (p2 - p1).Magnitude
+		local dur = math.clamp(dist / 620, 6, 11)
+		clouds = Instance.new("Folder")
+		clouds.Name = "NuvensViagem"
+		clouds.Parent = workspace
+		local function pathPos(s)
+			return p1:Lerp(p2, smooth(s)) + Vector3.new(0, 260 * math.sin(PI * s), 0)
+		end
+		for i = 1, 16 do
+			local s = i / 17
+			local c = pathPos(s)
+			local side = (i % 2 == 0) and 1 or -1
+			createCloud(clouds, c + Vector3.new(heading.Z * side * rng:NextNumber(110, 300), rng:NextNumber(-70, 70),
+				-heading.X * side * rng:NextNumber(110, 300)))
+		end
+		local wind = sp(ship, Vector3.new(220, 120, 220), shipCF, C.Foam, Enum.Material.SmoothPlastic,
+			{ Transparency = 1, Name = "Vento" })
+		local we = Instance.new("ParticleEmitter")
+		we.Shape = Enum.ParticleEmitterShape.Box
+		we.Rate = 140
+		we.Lifetime = NumberRange.new(0.6, 1)
+		we.Speed = NumberRange.new(0, 0)
+		we.Size = NumberSequence.new(2.5, 0)
+		we.LightEmission = 1
+		we.LockedToPart = false
+		we.Transparency = NumberSequence.new(0.3, 1)
+		we.Color = ColorSequence.new(C.VibLight, C.Cyan)
+		we.Parent = wind
+		say("A caminho de Wakanda...", 3)
+		animate(dur, function(s)
+			local pos = pathPos(s)
+			local a, b = pathPos(math.max(s - 0.015, 0)), pathPos(math.min(s + 0.015, 1))
+			local dh = Vector3.new(b.X - a.X, 0, b.Z - a.Z).Magnitude
+			local slope = math.clamp((b.Y - a.Y) / math.max(dh, 1), -0.4, 0.4)
+			local fwd = (heading + Vector3.new(0, slope, 0)).Unit
+			shipCF = CFrame.lookAt(pos, pos + fwd) * CFrame.Angles(0, 0, math.sin(s * PI * 2) * 0.12)
+			ship:PivotTo(shipCF)
+			wind.CFrame = CFrame.new(pos)
+			local sweep = -58 + 116 * smooth(s)
+			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(sweep, 18, 78)).Position, pos)
+			cam.FieldOfView = 70 + 32 * math.sin(PI * s)
+		end)
+		wind:Destroy()
+		if clouds then
+			clouds:Destroy()
+			clouds = nil
+		end
+
+		-- 5) aproximacao e pouso
+		say("Chegando em Wakanda...", 3)
+		local p3 = DEST + Vector3.new(0, 16, 0)
+		animate(3.8, function(s)
+			local pos = p2:Lerp(p3, easeOut(s))
+			shipCF = CFrame.lookAt(pos, pos + heading + Vector3.new(0, -0.3 * (1 - s), 0))
+			ship:PivotTo(shipCF)
+			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(-30, 22 + 8 * (1 - s), 70)).Position, pos)
+			cam.FieldOfView = 70 + 8 * (1 - s)
+		end)
+		local landPos = DEST + Vector3.new(0, 5.2, 0)
+		animate(1.6, function(s)
+			local pos = p3:Lerp(landPos, smooth(s))
+			shipCF = CFrame.lookAt(pos, pos + heading)
+			ship:PivotTo(shipCF)
+			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(-30, 20, 64)).Position, pos)
+		end)
+		ramp.Transparency = 0
+
+		-- 6) o jogador desce da nave
+		if follow then
+			follow:Disconnect()
+			follow = nil
+		end
+		local out = shipCF:PointToWorldSpace(Vector3.new(0, 0, 36))
+		out = Vector3.new(out.X, DEST.Y + 3.4, out.Z)
+		local outCF = CFrame.lookAt(out, Vector3.new(CENTER.X, out.Y, CENTER.Z))
+		local fromCF = root.CFrame
+		animate(1.6, function(s)
+			root.CFrame = fromCF:Lerp(outCF, smooth(s))
+			root.AssemblyLinearVelocity = Vector3.zero
+		end)
+		say("Bem-vindo a Wakanda!", 3)
+	end)
+
+	if not ok then
+		warn("[Wakanda] erro na viagem: " .. tostring(err))
+		if wakandaReady and root and root.Parent then
+			root.CFrame = CFrame.new(DEST + Vector3.new(30, 4, 0))
+		end
+	end
+
+	-- limpeza e devolucao do controle
+	if follow then
+		follow:Disconnect()
+	end
+	if clouds then
+		clouds:Destroy()
+	end
+	letterbox(false)
+	cam.CameraType = Enum.CameraType.Custom
+	if hum and hum.Parent then
+		cam.CameraSubject = hum
+		hum.PlatformStand = false
+	end
+	TweenService:Create(cam, TweenInfo.new(0.8), { FieldOfView = oldFov }):Play()
+	if ship then
+		task.delay(10, function()
+			if ship then
+				ship:Destroy()
+			end
+		end)
+	end
+	task.wait(1)
+	traveling = false
+	if promptRef then
+		promptRef.Enabled = true
+	end
+end
+
+local function setupPortal()
+	buildUI()
+	local prompt, cd = createPortalTerminal()
+	prompt.Triggered:Connect(function(who)
+		if who == localPlayer then
+			travel()
+		end
+	end)
+	cd.MouseClick:Connect(function(who)
+		if who == localPlayer then
+			travel()
+		end
+	end)
+	prompt.PromptShown:Connect(function()
+		ui.button.Visible = not traveling
+	end)
+	prompt.PromptHidden:Connect(function()
+		ui.button.Visible = false
+	end)
+	ui.button.Activated:Connect(travel)
+end
+
 
 ------------------------------------------------------------------
 -- VEGETACAO (distribuicao)
 ------------------------------------------------------------------
 local function createVegetation(parent)
-	-- jardim do palacio
-	for k = 0, 29 do
-		local a = k / 30 * 2 * PI
-		local x, z = math.cos(a) * 112, math.sin(a) * 112
-		if math.abs(x) > 34 and math.abs(z) > 34 and not blocked(x, z, 4) then
-			if k % 2 == 0 then
-				createTree(parent, V(x, 0.3, z), 0.9)
-			else
-				createBush(parent, V(x, 0.3, z), 1.2)
-			end
-		end
-	end
 	-- arvores nas avenidas
 	for _, s in ipairs(roadSegs) do
 		if s.trees then
@@ -1102,34 +2037,32 @@ local function createVegetation(parent)
 			local len = math.sqrt(dx * dx + dz * dz)
 			local ux, uz = dx / len, dz / len
 			local px, pz = -uz, ux
-			local steps = math.floor(len / 40)
-			for i = 1, steps do
+			for i = 1, math.floor(len / 45) do
 				for _, side in ipairs({ -1, 1 }) do
-					local off = s.width / 2 + 13
-					local x = s.ax + ux * i * 40 + px * off * side
-					local z = s.az + uz * i * 40 + pz * off * side
+					local off = s.width / 2 + 14
+					local x = s.ax + ux * i * 45 + px * off * side
+					local z = s.az + uz * i * 45 + pz * off * side
 					if not blocked(x, z, 4) then
-						createTree(parent, V(x, groundY(x, z), z), 0.85)
+						createTree(parent, V(x, groundY(x, z), z), 1.1)
 					end
 				end
 			end
 		end
 	end
 	-- margens do rio
-	for i = 1, #riverSegs do
-		local s = riverSegs[i]
+	for _, s in ipairs(riverSegs) do
 		local dx, dz = s.bx - s.ax, s.bz - s.az
 		local len = math.sqrt(dx * dx + dz * dz)
 		local ux, uz = dx / len, dz / len
-		for j = 1, math.floor(len / 36) do
+		for j = 1, math.floor(len / 40) do
 			for _, side in ipairs({ -1, 1 }) do
-				local x = s.ax + ux * j * 36 - uz * (s.w / 2 + 16) * side
-				local z = s.az + uz * j * 36 + ux * (s.w / 2 + 16) * side
+				local x = s.ax + ux * j * 40 - uz * (s.w / 2 + 16) * side
+				local z = s.az + uz * j * 40 + ux * (s.w / 2 + 16) * side
 				if not blocked(x, z, 6, true) then
 					if j % 2 == 0 then
-						createTree(parent, V(x, groundY(x, z), z), 1)
+						createTree(parent, V(x, groundY(x, z), z), 1.2)
 					else
-						createBush(parent, V(x, groundY(x, z), z), 1.3)
+						createBush(parent, V(x, groundY(x, z), z), 1.5)
 					end
 				end
 			end
@@ -1137,48 +2070,45 @@ local function createVegetation(parent)
 	end
 	-- colinas
 	for _, h in ipairs(hills) do
-		createTree(parent, h.pos + V(rng:NextNumber(-8, 8), h.h, rng:NextNumber(-8, 8)), 1.2)
-		createTree(parent, h.pos + V(rng:NextNumber(-12, 12), h.h, rng:NextNumber(-12, 12)), 0.9)
-		createBush(parent, h.pos + V(rng:NextNumber(-12, 12), h.h, rng:NextNumber(-12, 12)), 1.4)
+		createTree(parent, h.pos + V(rng:NextNumber(-8, 8), h.h, rng:NextNumber(-8, 8)), 1.4)
+		createTree(parent, h.pos + V(rng:NextNumber(-12, 12), h.h, rng:NextNumber(-12, 12)), 1.1)
+		createBush(parent, h.pos + V(rng:NextNumber(-12, 12), h.h, rng:NextNumber(-12, 12)), 1.6)
 	end
-	-- base das montanhas
+	-- base das montanhas internas
 	for _, m in ipairs(innerMountains) do
 		local rad = m.pos.Unit
 		local tan = V(-rad.Z, 0, rad.X)
-		for i = 1, 5 do
-			local p = m.pos - rad * (m.w * 0.55 + rng:NextNumber(10, 50)) + tan * rng:NextNumber(-m.w * 0.4, m.w * 0.4)
+		for i = 1, 6 do
+			local p = m.pos - rad * (m.w * 0.55 + rng:NextNumber(10, 60)) + tan * rng:NextNumber(-m.w * 0.4, m.w * 0.4)
 			if not blocked(p.X, p.Z, 6) then
 				if i % 2 == 0 then
-					createBush(parent, V(p.X, 0, p.Z), 1.6)
+					createBush(parent, V(p.X, 0, p.Z), 1.8)
 				else
-					createTree(parent, V(p.X, 0, p.Z), 1.3)
+					createTree(parent, V(p.X, 0, p.Z), 1.5)
 				end
 			end
 		end
 	end
 	-- campo aberto
-	for _ = 1, 70 do
+	for _ = 1, 90 do
 		local a = rng:NextNumber(0, 2 * PI)
-		local r = rng:NextNumber(350, 560)
+		local r = rng:NextNumber(620, 1100)
 		local x, z = math.cos(a) * r, math.sin(a) * r
-		if not blocked(x, z, 8) then
-			createTree(parent, V(x, groundY(x, z), z), rng:NextNumber(0.9, 1.4))
+		if z > -900 and not blocked(x, z, 8) then
+			createTree(parent, V(x, 0, z), rng:NextNumber(1.1, 1.7))
 		end
 	end
-	-- arbustos e plantas pela cidade
-	for _ = 1, 60 do
+	-- arbustos pela cidade
+	for _ = 1, 70 do
 		local a = rng:NextNumber(0, 2 * PI)
-		local r = rng:NextNumber(100, 400)
+		local r = rng:NextNumber(260, 600)
 		local x, z = math.cos(a) * r, math.sin(a) * r
-		if not blocked(x, z, 4) then
-			createBush(parent, V(x, groundY(x, z), z), rng:NextNumber(0.9, 1.5))
+		if not blocked(x, z, 6) then
+			createBush(parent, V(x, groundY(x, z), z), rng:NextNumber(1.2, 2))
 		end
 	end
 end
 
-------------------------------------------------------------------
--- LUZ DO AMBIENTE
-------------------------------------------------------------------
 local function applyLighting()
 	Lighting.ClockTime = 18.3
 	Lighting.Brightness = 2
@@ -1189,8 +2119,8 @@ local function applyLighting()
 		atm = Instance.new("Atmosphere")
 		atm.Parent = Lighting
 	end
-	atm.Density = 0.22
-	atm.Haze = 0.6
+	atm.Density = 0.18
+	atm.Haze = 0.5
 	atm.Color = Color3.fromRGB(190, 170, 230)
 end
 
@@ -1202,6 +2132,7 @@ local function run(name, fn)
 	if not ok then
 		warn("[Wakanda] erro em " .. name .. ": " .. tostring(err))
 	end
+	curScale, curOff = 1, Vector3.zero
 	task.wait()
 end
 
@@ -1216,17 +2147,17 @@ local function createWakanda()
 
 	local F = {}
 	for _, n in ipairs({ "Terreno", "Palacio", "Cidade", "Estradas", "Montanhas", "Vegetacao", "Agua",
-		"Vibranium", "Tecnologia", "Pantera", "Iluminacao" }) do
+		"Vibranium", "Tecnologia", "Pantera", "Iluminacao", "Campo" }) do
 		F[n] = folder(root, n)
 	end
 
-	local VIB_C = V(270, 0, 250)
-	local PAN_C = V(260, 0, -230)
-	local TEC_C = V(-150, 0, -340)
-
 	run("terreno", function()
-		make(F.Terreno, V(2000, 2, 2000), V(0, -1, 0), C.Ground, Enum.Material.Grass, { Name = "Terreno" })
-		cyl(F.Terreno, 0.3, 840, V(0, 0.15, 0), C.City, Enum.Material.Concrete, { Name = "BaseCidade" })
+		for gx = -1500, 1500, 1000 do
+			for gz = -2400, 1600, 1000 do
+				make(F.Terreno, V(1000, 2, 1000), V(gx, -1, gz), C.Ground, Enum.Material.Grass, { Name = "Terreno" })
+			end
+		end
+		cyl(F.Terreno, 0.3, 1240, V(0, 0.15, 0), C.City, Enum.Material.Concrete, { Name = "BaseCidade" })
 	end)
 
 	run("estradas", function()
@@ -1235,69 +2166,65 @@ local function createWakanda()
 
 	local waterfalls = {}
 	run("agua", function()
-		local nPool = createWaterfall(F.Agua, V(0, 0, -520), V(0, 0, -300), 44, 130)
-		waterfalls[#waterfalls + 1] = V(0, 0, -520)
-		createPond(F.Agua, nPool, 40)
-		local nwBase = V(-440, 0, -470)
-		local nwPool = createWaterfall(F.Agua, nwBase, V(-300, 0, -250), 34, 110)
-		waterfalls[#waterfalls + 1] = nwBase
-		createRiver(F.Agua, {
-			nwPool, V(-300, 0, -250), V(-300, 0, 40), V(-260, 0, 220), V(-120, 0, 330),
-		}, 26)
-		createPond(F.Agua, V(-120, 0, 330), 40)
-		waterfalls[#waterfalls + 1] = V(440, 0, -390)
-		createWaterfall(F.Agua, V(440, 0, -390), V(200, 0, -100), 30, 100)
-		waterfalls[#waterfalls + 1] = V(520, 0, 330)
-		createWaterfall(F.Agua, V(520, 0, 330), V(250, 0, 150), 30, 100)
+		local function wf(base, target, w, h)
+			waterfalls[#waterfalls + 1] = base
+			return createWaterfall(F.Agua, base, target, w, h)
+		end
+		local nwPool = wf(V(-700, 0, -720), V(-520, 0, -520), 36, 115)
+		wf(V(780, 0, -560), V(560, 0, -400), 32, 105)
+		wf(V(980, 0, 260), V(760, 0, 150), 32, 105)
+		createRiver(F.Agua, { nwPool, V(-770, 0, -300), V(-780, 0, -100), V(-780, 0, 100), V(-790, 0, 300) }, 26)
+		createPond(F.Agua, V(-800, 0, 380), 40)
 	end)
 
 	run("palacio", function()
-		createPalace(F.Palacio)
+		withScale(1.6, nil, function()
+			createPalace(F.Palacio)
+		end)
 	end)
 	run("vibranium", function()
-		createVibraniumArea(F.Vibranium, VIB_C)
+		withScale(1.8, VIB_C, function()
+			createVibraniumArea(F.Vibranium, Vector3.zero)
+		end)
 	end)
 	run("tecnologia", function()
-		createTechnologyArea(F.Tecnologia, TEC_C)
+		withScale(1.8, TECH_C, function()
+			createTechnologyArea(F.Tecnologia, Vector3.zero)
+		end)
 	end)
 	run("pantera", function()
-		createPantherArea(F.Pantera, PAN_C)
+		withScale(1.5, PAN_C, function()
+			createPantherArea(F.Pantera, Vector3.zero)
+		end)
+	end)
+	run("porto", function()
+		createLandingPad(F.Cidade, PAD_C)
 	end)
 
 	run("pracas", function()
-		createPlaza(F.Cidade, V(100, 0, 100), 56, false)
-		createPlaza(F.Cidade, V(-100, 0, 100), 56, false)
-		createPlaza(F.Cidade, V(100, 0, -100), 56, false)
-		createPlaza(F.Cidade, V(-100, 0, -100), 56, true)
+		createPlaza(F.Cidade, V(215, 0, 215), 56, false)
+		createPlaza(F.Cidade, V(-215, 0, 215), 56, false)
+		createPlaza(F.Cidade, V(215, 0, -215), 56, false)
+		createPlaza(F.Cidade, V(-215, 0, -215), 56, true)
 	end)
-
 	run("comercio", function()
-		for _, p in ipairs({ V(270, 0, 90), V(-215, 0, -100), V(150, 0, 300) }) do
-			if not blocked(p.X, p.Z, 28) then
-				createMall(F.Cidade, V(p.X, 0.3, p.Z))
-			end
-		end
-		for _, p in ipairs({ V(-120, 0, 260), V(300, 0, -60), V(-250, 0, 120) }) do
-			if not blocked(p.X, p.Z, 26) then
-				createMarket(F.Cidade, V(p.X, 0, p.Z))
-			end
-		end
+		createDistricts(F)
 	end)
-
 	run("cidade", function()
 		createCity(F.Cidade)
 	end)
 
 	run("torres", function()
-		local placed = 0
-		local tries = 0
-		while placed < 6 and tries < 60 do
+		local placed, tries = 0, 0
+		while placed < 8 and tries < 80 do
 			tries = tries + 1
 			local a = rng:NextNumber(0, 2 * PI)
-			local r = rng:NextNumber(220, 390)
+			local r = rng:NextNumber(260, 580)
 			local x, z = math.cos(a) * r, math.sin(a) * r
-			if not blocked(x, z, 12) then
-				createEnergyTower(F.Tecnologia, V(x, 0.3, z), rng:NextNumber(45, 70), C.Cyan)
+			if not blocked(x, z, 14) then
+				withScale(2, V(x, 0.3, z), function()
+					createEnergyTower(F.Tecnologia, Vector3.zero, rng:NextNumber(35, 60), C.Cyan)
+				end)
 				placed = placed + 1
 			end
 		end
@@ -1305,46 +2232,56 @@ local function createWakanda()
 
 	run("colinas", function()
 		local made, tries = 0, 0
-		while made < 12 and tries < 80 do
+		while made < 14 and tries < 120 do
 			tries = tries + 1
 			local a = rng:NextNumber(0, 2 * PI)
-			local r = rng:NextNumber(440, 540)
+			local r = rng:NextNumber(640, 950)
 			local x, z = math.cos(a) * r, math.sin(a) * r
 			local rad = rng:NextNumber(35, 65)
-			if not blocked(x, z, rad + 10) then
+			if z > -800 and not blocked(x, z, rad + 10) then
 				createHill(F.Terreno, V(x, 0, z), rad, rng:NextNumber(8, 18))
 				made = made + 1
 			end
 		end
 	end)
 
+	run("campo", function()
+		createBattlefield(F)
+	end)
+
 	run("montanhas", function()
-		for i = 0, 17 do
-			local ang = i / 18 * 2 * PI + rng:NextNumber(-0.08, 0.08)
-			local r = 800 + rng:NextNumber(-40, 40)
-			local pos = V(math.cos(ang) * r, 0, math.sin(ang) * r)
-			local w = rng:NextNumber(300, 380)
-			local h = rng:NextNumber(230, 340)
-			createMountain(F.Montanhas, pos, w, h, true)
-			local rad = pos.Unit
-			local tan = V(-rad.Z, 0, rad.X)
-			createMountain(F.Montanhas, pos - rad * w * 0.35 + tan * w * 0.3, w * 0.6, h * 0.65, true)
+		local avoid = { TECH_C, VIB_C, PAN_C }
+		for _, wfp in ipairs(waterfalls) do
+			table.insert(avoid, wfp)
 		end
-		for i = 0, 13 do
-			local ang = i / 14 * 2 * PI + rng:NextNumber(-0.06, 0.06)
-			local pos = V(math.cos(ang) * 640, 0, math.sin(ang) * 640)
-			local near = false
-			for _, wf in ipairs(waterfalls) do
-				if (wf - pos).Magnitude < 190 then
-					near = true
+		local function nearAvoid(pos, d)
+			for _, p in ipairs(avoid) do
+				if (Vector3.new(p.X, 0, p.Z) - pos).Magnitude < d then
+					return true
 				end
 			end
-			if not near then
-				local w = rng:NextNumber(170, 230)
-				createMountain(F.Montanhas, pos, w, rng:NextNumber(90, 190), false)
+			return false
+		end
+		-- anel externo de montanhas gigantes (o norte fica com o campo de batalha)
+		for i = 0, 21 do
+			local ang = i / 22 * 2 * PI + rng:NextNumber(-0.04, 0.04)
+			local r = 1450 + rng:NextNumber(-40, 40)
+			local pos = V(math.cos(ang) * r, 0, math.sin(ang) * r)
+			if pos.Z > -600 then
+				createMountain(F.Montanhas, pos, rng:NextNumber(380, 460), rng:NextNumber(300, 450), true)
+			end
+		end
+		-- anel interno (passagem aberta ao norte para a estrada)
+		for i = 0, 15 do
+			local ang = i / 16 * 2 * PI + rng:NextNumber(-0.05, 0.05)
+			local pos = V(math.cos(ang) * 1000, 0, math.sin(ang) * 1000)
+			if pos.Z > -650 and not nearAvoid(pos, 300) then
+				local w = rng:NextNumber(220, 300)
+				createMountain(F.Montanhas, pos, w, rng:NextNumber(100, 200), false)
 				innerMountains[#innerMountains + 1] = { pos = pos, w = w }
 			end
 		end
+		createFieldMountains(F.Montanhas)
 	end)
 
 	run("vegetacao", function()
@@ -1355,13 +2292,21 @@ local function createWakanda()
 		run("iluminacao", applyLighting)
 	end
 
+	wakandaReady = true
+	print(string.format("[Wakanda] pronta: %d partes, %d luzes.", partCount, lightCount + streetLightCount))
+
 	if CONFIG.TeleportPlayer then
 		local player = Players.LocalPlayer
 		local char = player.Character or player.CharacterAdded:Wait()
-		char:PivotTo(CFrame.new(CENTER + V(0, 8, 130)))
+		char:PivotTo(CFrame.new(DEST + V(30, 6, 0)))
 	end
-
-	print(string.format("[Wakanda] pronta: %d partes, %d luzes.", partCount, lightCount + streetLightCount))
 end
 
+-- o terminal de viagem aparece imediatamente; Wakanda e construida em seguida
+task.spawn(function()
+	local ok, err = pcall(setupPortal)
+	if not ok then
+		warn("[Wakanda] erro no portal: " .. tostring(err))
+	end
+end)
 task.spawn(createWakanda)
