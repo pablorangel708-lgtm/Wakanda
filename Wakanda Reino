@@ -12,7 +12,7 @@ end
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 
-local CENTER = Vector3.new(2933, 2, -119)
+local CENTER = Vector3.new(-574, 15756, 962)
 local MAP_TEXTURE = "rbxassetid://33384188"
 
 local CONFIG = {
@@ -1152,7 +1152,9 @@ local function createRoads(parent, lights)
 	createBridge(parent, V(-750, 0, 0), V(-810, 0, 0), 40)
 	createRoad(parent, V(-810, 0, 0), V(-900, 0, 0), 40, { Lights = lights, Spacing = 100 })
 	-- estrada larga ate o campo de batalha
-	createRoad(parent, V(0, 0, -1000), V(0, 0, -1330), 70, { Lights = lights, Spacing = 110 })
+	createRoad(parent, V(0, 0, -1000), V(0, 0, -1212), 70, { Lights = lights, Spacing = 110 })
+	createBridge(parent, V(0, 0, -1212), V(0, 0, -1278), 70)
+	createRoad(parent, V(0, 0, -1278), V(0, 0, -1330), 70, { Lights = lights, Spacing = 110 })
 	-- acessos as areas especiais
 	createRoad(parent, ring[6], V(-560, 0, 505), 30, { Lights = lights, Spacing = 90 })
 	createRoad(parent, ring[2], V(560, 0, 505), 30, { Lights = lights, Spacing = 90 })
@@ -1247,70 +1249,14 @@ end
 
 
 ------------------------------------------------------------------
--- CAMPO DE BATALHA (inspirado na savana de Wakanda de Guerra Infinita)
+-- CAMPO DE BATALHA (planicie limpa, colinas suaves e pequenos rios)
 ------------------------------------------------------------------
 local FIELD_R = 520
-
-local function createRockCluster(parent, pos, s)
-	local col = ROCKS[rng:NextInteger(1, #ROCKS)]
-	for i = 1, rng:NextInteger(2, 3) do
-		local sz = V(s * rng:NextNumber(0.9, 1.5), s * rng:NextNumber(0.7, 1.6), s * rng:NextNumber(0.9, 1.5))
-		local cf = CFrame.new(pos + V(rng:NextNumber(-1, 1) * s * 0.8, sz.Y * 0.35, rng:NextNumber(-1, 1) * s * 0.8))
-			* CFrame.Angles(rng:NextNumber(-0.3, 0.3), rng:NextNumber(0, PI), rng:NextNumber(-0.3, 0.3))
-		make(parent, sz, cf, col:Lerp(C.Stone, rng:NextNumber(0, 0.4)), Enum.Material.Rock,
-			{ Name = "Rocha", Shadow = s > 8 })
-	end
-end
-
-local function createRockSpire(parent, pos, h, w)
-	local col = ROCKS[rng:NextInteger(1, #ROCKS)]
-	local yaw = rng:NextNumber(0, PI)
-	for i = 1, 3 do
-		local f = (i - 1) / 3
-		local sw = w * (1 - f * 0.55)
-		local sh = h / 3
-		local cf = CFrame.new(pos + V(rng:NextNumber(-2, 2), sh * (i - 0.5), rng:NextNumber(-2, 2)))
-			* CFrame.Angles(rng:NextNumber(-0.08, 0.08), yaw + i * 0.4, rng:NextNumber(-0.08, 0.08))
-		make(parent, V(sw, sh + 2, sw * 0.8), cf, col:Lerp(Color3.fromRGB(150, 140, 128), f * 0.5),
-			Enum.Material.Rock, { Name = "Formacao", Shadow = true })
-	end
-end
-
-local function createCrater(parent, pos, r, y)
-	cyl(parent, 0.15, r * 2, pos + V(0, y, 0), Color3.fromRGB(70, 56, 44), Enum.Material.Ground,
-		{ CanCollide = false, Name = "Cratera" })
-	cyl(parent, 0.15, r * 1.2, pos + V(0, y + 0.03, 0), Color3.fromRGB(46, 38, 32), Enum.Material.Ground,
-		{ CanCollide = false, Name = "CrateraInterna" })
-end
-
-local function createWatchtower(parent, pos)
-	cyl(parent, 64, 8, pos + V(0, 32.4, 0), C.Metal, Enum.Material.Metal, { Name = "TorreVigia" })
-	cyl(parent, 3, 20, pos + V(0, 65, 0), C.DarkMetal, Enum.Material.Metal, { Name = "PlataformaVigia" })
-	cyl(parent, 0.8, 21, pos + V(0, 66.6, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "AnelVigia" })
-	for _, a in ipairs({ 0, PI / 2, PI, PI * 1.5 }) do
-		make(parent, V(0.6, 8, 0.6), pos + V(math.cos(a) * 9, 71, math.sin(a) * 9), C.Metal, Enum.Material.Metal,
-			{ CanCollide = false, Name = "GradeVigia" })
-	end
-	local orb = ball(parent, V(6, 6, 6), pos + V(0, 76, 0), C.Vib, Enum.Material.Neon, { CanCollide = false })
-	addLight(orb, C.Vib, 50, 1.5)
-end
-
-local function createGate(parent, z)
-	for _, s in ipairs({ -1, 1 }) do
-		make(parent, V(16, 90, 16), V(s * 56, 46, z), C.DarkMetal, Enum.Material.Metal, { Shadow = true, Name = "PilarPortao" })
-		make(parent, V(1.2, 80, 0.6), V(s * 56, 46, z + 8.3), C.Vib, Enum.Material.Neon, { CanCollide = false })
-		ball(parent, V(10, 10, 10), V(s * 56, 96, z), C.Vib, Enum.Material.Neon, { CanCollide = false })
-	end
-	make(parent, V(128, 12, 18), V(0, 94, z), C.DarkMetal, Enum.Material.Metal, { Shadow = true, Name = "LintelPortao" })
-	make(parent, V(128.6, 1, 18.6), V(0, 100.5, z), C.Gold, Enum.Material.Neon, { CanCollide = false })
-	local sign = make(parent, V(100, 7, 1), V(0, 94, z + 9.4), C.Black, Enum.Material.Metal, { Name = "PlacaPortao" })
-	addLabel(sign, Enum.NormalId.Back, "CAMPO DE BATALHA DE WAKANDA", C.Gold)
-end
 
 local function createBattlefield(F)
 	local g = F.Campo
 
-	-- grande planicie de savana
+	-- grande planicie aberta de grama
 	cyl(g, 0.4, FIELD_R * 2, BC + V(0, 0.2, 0), Color3.fromRGB(96, 136, 60), Enum.Material.Grass, { Name = "CampoGrama" })
 	local tones = {
 		Color3.fromRGB(122, 150, 66), Color3.fromRGB(82, 120, 56),
@@ -1323,81 +1269,52 @@ local function createBattlefield(F)
 			tones[(i % #tones) + 1], Enum.Material.Grass, { CanCollide = false, Name = "Mancha" })
 	end
 
-	-- area central ampla de combate
-	cyl(g, 0.2, 340, BC + V(0, 0.55, 0), Color3.fromRGB(150, 118, 84), Enum.Material.Ground, { Name = "ArenaTerra" })
-	cyl(g, 0.2, 250, BC + V(0, 0.65, 0), Color3.fromRGB(132, 104, 76), Enum.Material.Ground, { Name = "ArenaTerra2" })
-	cyl(g, 0.2, 90, BC + V(0, 0.8, 0), C.Stone, Enum.Material.Slate, { Name = "PlataformaCentral" })
-	local map = make(g, V(60, 1, 60), BC + V(0, 1.2, 0), C.DarkMetal, Enum.Material.Metal, { Name = "MapaMundiCentral" })
-	addMap(map, Enum.NormalId.Top)
-	make(g, V(62, 0.3, 62), BC + V(0, 1.75, 0), C.Vib, Enum.Material.Neon, { CanCollide = false, Name = "BordaMapa" })
-	for k = 0, 3 do
-		local a = k * PI / 2 + PI / 4
-		createStele(g, BC + V(math.cos(a) * 62, 0.9, math.sin(a) * 62), 12, 14, -a + PI / 2)
-	end
-	for i = 1, 14 do
-		local a = rng:NextNumber(0, 2 * PI)
-		local r = rng:NextNumber(70, FIELD_R * 0.9)
-		createCrater(g, BC + V(math.cos(a) * r, 0, math.sin(a) * r), rng:NextNumber(12, 30), r < 170 and 0.9 or 0.5)
+	-- pequenos rios cruzando o campo
+	local rivers = {
+		{ V(-600, 0, -1250), V(-380, 0, -1215), V(-170, 0, -1270), V(60, 0, -1235), V(260, 0, -1275),
+			V(470, 0, -1225), V(640, 0, -1260) },
+		{ V(-620, 0, -1560), V(-420, 0, -1500), V(-200, 0, -1545), V(40, 0, -1500), V(250, 0, -1550),
+			V(460, 0, -1505), V(650, 0, -1545) },
+		{ V(-600, 0, -1790), V(-380, 0, -1830), V(-150, 0, -1785), V(70, 0, -1825), V(300, 0, -1790),
+			V(520, 0, -1830), V(640, 0, -1800) },
+	}
+	for _, pts in ipairs(rivers) do
+		createRiver(g, pts, 14)
 	end
 
-	-- pontos aleatorios fora da arena e fora da estrada
-	local function samplePoint(rMin, rMax, y)
-		for _ = 1, 12 do
+	-- colinas suaves ao redor do campo
+	for i = 1, 12 do
+		local a = i / 12 * 2 * PI + rng:NextNumber(-0.1, 0.1)
+		local r = FIELD_R + rng:NextNumber(20, 90)
+		local x, z = math.cos(a) * r, math.sin(a) * r
+		if not (math.abs(x) < 110 and z > 0) then
+			createHill(g, V(BC.X + x, 0, BC.Z + z), rng:NextNumber(55, 85), rng:NextNumber(12, 22))
+		end
+	end
+
+	-- poucas arvores e arbustos soltos (campo continua limpo)
+	local function samplePoint(rMin, rMax)
+		for _ = 1, 15 do
 			local a = rng:NextNumber(0, 2 * PI)
 			local r = math.sqrt(rng:NextNumber(rMin * rMin, rMax * rMax))
-			local x, z = math.cos(a) * r, math.sin(a) * r
-			if not (math.abs(x) < 40 and z > 100) then
-				return V(BC.X + x, y, BC.Z + z)
+			local x, z = BC.X + math.cos(a) * r, BC.Z + math.sin(a) * r
+			if not blocked(x, z, 12) then
+				return V(x, 0.4, z)
 			end
 		end
 		return nil
 	end
-
-	-- vegetacao espalhada
-	for i = 1, 70 do
-		local p = samplePoint(190, FIELD_R - 20, 0.4)
+	for i = 1, 26 do
+		local p = samplePoint(150, FIELD_R - 30)
 		if p then
-			createTree(g, p, rng:NextNumber(1.3, 2.2), (i % 3 == 0) and 3 or 1)
+			createTree(g, p, rng:NextNumber(1.4, 2.1), (i % 3 == 0) and 3 or 1)
 		end
 	end
-	for _ = 1, 50 do
-		local p = samplePoint(120, FIELD_R - 10, 0.4)
+	for _ = 1, 24 do
+		local p = samplePoint(100, FIELD_R - 10)
 		if p then
-			createBush(g, p, rng:NextNumber(1.4, 2.4))
+			createBush(g, p, rng:NextNumber(1.4, 2.2))
 		end
-	end
-
-	-- rochas e obstaculos naturais
-	for _ = 1, 46 do
-		local p = samplePoint(110, FIELD_R - 15, 0.4)
-		if p then
-			createRockCluster(g, p, rng:NextNumber(5, 13))
-		end
-	end
-	for i = 1, 14 do
-		local a = i / 14 * 2 * PI + rng:NextNumber(-0.15, 0.15)
-		local r = FIELD_R + rng:NextNumber(-60, 20)
-		local x, z = math.cos(a) * r, math.sin(a) * r
-		if not (math.abs(x) < 70 and z > 0) then
-			createRockSpire(g, V(BC.X + x, 0.4, BC.Z + z), rng:NextNumber(40, 85), rng:NextNumber(22, 36))
-		end
-	end
-
-	-- estruturas de Wakanda perto do campo
-	createGate(g, -1000)
-	for k = 0, 5 do
-		local a = PI * 0.12 + k * PI * 0.152 -- arco voltado para a cidade
-		createWatchtower(g, BC + V(math.cos(a) * (FIELD_R - 30), 0.4, math.sin(a) * (FIELD_R - 30)))
-	end
-	for _, s in ipairs({ -1, 1 }) do
-		local labPos = V(s * 400, 0.4, -1200)
-		withScale(1.6, labPos, function()
-			createLab(g, Vector3.zero, (BC - labPos), 44, 28, s < 0 and C.Cyan or C.Vib, "POSTO DE COMANDO")
-		end)
-		createVehicle(g, V(s * 230, 5, -1170), s * 0.5, C.Vib)
-		createVehicle(g, V(s * 300, 5, -1790), s * -0.4, C.Cyan)
-		createEnergyTower(g, V(s * 300, 0.4, -1330), 96, C.Cyan)
-		createEnergyTower(g, V(s * 440, 0.4, -1520), 110, C.Vib)
 	end
 
 	-- horizonte: torres e predios de Wakanda ao fundo
@@ -1405,11 +1322,6 @@ local function createBattlefield(F)
 		local x = -600 + i * 200 + rng:NextNumber(-25, 25)
 		createBuilding(g, V(x, 0.3, -2000 + rng:NextNumber(-30, 30)), 46, 46, rng:NextNumber(230, 360),
 			(i % 2 == 0) and "spire" or "dome")
-	end
-	for _, s in ipairs({ -1, 1 }) do
-		withScale(3, V(s * 340, 0.3, -1960), function()
-			createEnergyTower(g, Vector3.zero, 90, C.Vib)
-		end)
 	end
 	reserve(BC.X, BC.Z, FIELD_R + 40)
 end
@@ -1741,56 +1653,75 @@ end
 ------------------------------------------------------------------
 -- NAVE DE WAKANDA
 ------------------------------------------------------------------
-local SEAT_LOCAL = CFrame.new(0, 5.8, 5)
+local SEAT_LOCAL = CFrame.new(0, 6.2, 2)
 
+-- nave de Wakanda: casco escuro e largo, cupula de vidro com estrutura, asas anguladas com casulos de motor
 local function buildShip(cf)
 	local m = Instance.new("Model")
 	m.Name = "NaveWakanda"
-	local hullCol = Color3.fromRGB(52, 50, 72)
+	local dark = Color3.fromRGB(30, 32, 40)
+	local dark2 = Color3.fromRGB(46, 48, 58)
+	local M = Enum.Material.Metal
+	local BALL, CYL = Enum.PartType.Ball, Enum.PartType.Cylinder
 	local function part(size, off, color, mat, opts)
 		return sp(m, size, cf * off, color, mat, opts)
 	end
-	local hull = part(Vector3.new(30, 8, 44), CFrame.new(0, -1.5, 0), hullCol, Enum.Material.Metal,
-		{ Shape = Enum.PartType.Ball, Name = "Casco" })
-	part(Vector3.new(24, 3, 36), CFrame.new(0, -5, 0), C.Black, Enum.Material.Metal, { Shape = Enum.PartType.Ball })
-	part(Vector3.new(12, 0.6, 12), CFrame.new(0, 2.7, 6), C.Metal, Enum.Material.Metal, { Name = "Deck" })
-	part(Vector3.new(12, 6, 16), CFrame.new(0, 3, -10), C.Cyan, Enum.Material.Glass,
-		{ Shape = Enum.PartType.Ball, Transparency = 0.4, Name = "Cabine" })
-	part(Vector3.new(16, 10, 15), CFrame.new(0, 5.5, 6), C.Cyan, Enum.Material.Glass,
-		{ Shape = Enum.PartType.Ball, Transparency = 0.55, Name = "Domo" })
-	part(Vector3.new(1, 0.4, 18), CFrame.new(0, 2.6, -12), C.Vib, Enum.Material.Neon, { Name = "Espinha" })
+	-- casco, carapaca traseira e ventre achatado com painel hexagonal
+	part(Vector3.new(28, 9, 42), CFrame.new(0, -2.5, 0), dark, M, { Shape = BALL, Name = "Casco" })
+	part(Vector3.new(22, 6, 22), CFrame.new(0, 0, 10), dark2, M, { Shape = BALL, Name = "Carapaca" })
+	part(Vector3.new(20, 2, 24), CFrame.new(0, -6.6, 1), dark, M, { Name = "Ventre" })
+	part(Vector3.new(0.3, 12, 12), CFrame.new(0, -7.7, 1) * VERT, Color3.fromRGB(150, 156, 164), M,
+		{ Shape = CYL, Name = "PainelHex" })
+	-- deck e cupula de vidro
+	part(Vector3.new(11, 0.6, 13), CFrame.new(0, 2.7, 2), C.Metal, M, { Name = "Deck" })
+	part(Vector3.new(15, 11, 20), CFrame.new(0, 5.2, 2), Color3.fromRGB(70, 90, 100), Enum.Material.Glass,
+		{ Shape = BALL, Transparency = 0.55, Name = "Cupula" })
+	part(Vector3.new(0.7, 0.7, 19), CFrame.new(0, 10.6, 2), dark, M, { Name = "NervuraCentral" })
+	part(Vector3.new(11, 0.7, 0.7), CFrame.new(0, 5, -7.6), dark, M, { Name = "TravessaFrontal" })
 	for _, s in ipairs({ -1, 1 }) do
-		part(Vector3.new(16, 0.8, 14), CFrame.new(s * 20, -1, 8) * CFrame.Angles(0, -s * 0.35, s * 0.08), hullCol,
-			Enum.Material.Metal, { Name = "Asa" })
-		part(Vector3.new(3, 3, 3), CFrame.new(s * 27, -1, 12), C.Vib, Enum.Material.Neon,
-			{ Shape = Enum.PartType.Ball, Name = "PontaAsa" })
-		part(Vector3.new(0.8, 9, 10), CFrame.new(s * 8, 5, 18) * CFrame.Angles(0, 0, -s * 0.2), C.DarkMetal,
-			Enum.Material.Metal, { Name = "Deriva" })
-		local eng = part(Vector3.new(7, 7, 7), CFrame.new(s * 9, -1, 21), C.Vib, Enum.Material.Neon,
-			{ Shape = Enum.PartType.Ball, Name = "Motor" })
+		part(Vector3.new(0.7, 0.7, 17), CFrame.new(s * 5.6, 7.8, 2), dark, M, { Name = "NervuraLateral" })
+		part(Vector3.new(0.7, 7, 0.7), CFrame.new(s * 4.8, 6.6, -7) * CFrame.Angles(0, 0, s * 0.45), dark, M,
+			{ Name = "PilarCupula" })
+		-- asas anguladas
+		part(Vector3.new(24, 1.2, 12), CFrame.new(s * 21, -2, 5) * CFrame.Angles(0, -s * 0.42, s * 0.05), dark2, M,
+			{ Name = "Asa" })
+		part(Vector3.new(14, 0.9, 7), CFrame.new(s * 35, -2.1, 11.5) * CFrame.Angles(0, -s * 0.6, s * 0.05), dark, M,
+			{ Name = "PonteiraAsa" })
+		part(Vector3.new(12, 0.25, 0.35), CFrame.new(s * 23, -1.35, -0.8) * CFrame.Angles(0, -s * 0.42, 0), C.Cyan,
+			Enum.Material.Neon, { Name = "BordaAsa" })
+		-- casulo de motor sob a asa
+		part(Vector3.new(6, 4.2, 16), CFrame.new(s * 17, -4.4, 6), dark, M, { Name = "CasuloMotor" })
+		part(Vector3.new(4.4, 0.5, 0.4), CFrame.new(s * 17, -3.8, -2.2), C.Cyan, Enum.Material.Neon, { Name = "Entrada" })
+		local eng = part(Vector3.new(4.6, 4.6, 4.6), CFrame.new(s * 17, -4.4, 14.5), C.Cyan, Enum.Material.Neon,
+			{ Shape = BALL, Name = "Motor" })
 		local pe = Instance.new("ParticleEmitter")
 		pe.Rate = 70
 		pe.Lifetime = NumberRange.new(0.4, 0.9)
 		pe.Speed = NumberRange.new(30, 48)
 		pe.SpreadAngle = Vector2.new(6, 6)
-		pe.Size = NumberSequence.new(3.2, 0.4)
+		pe.Size = NumberSequence.new(3, 0.4)
 		pe.LightEmission = 1
-		pe.Color = ColorSequence.new(C.VibLight, C.Cyan)
+		pe.Color = ColorSequence.new(C.Foam, C.Cyan)
 		pe.Transparency = NumberSequence.new(0.1, 1)
 		pe.EmissionDirection = Enum.NormalId.Back
 		pe.Parent = eng
 		local l = Instance.new("PointLight")
-		l.Color = C.Vib
+		l.Color = C.Cyan
 		l.Range = 30
 		l.Brightness = 3
 		l.Shadows = false
 		l.Parent = eng
+		-- derivas traseiras com detalhe dourado
+		part(Vector3.new(0.8, 7, 8), CFrame.new(s * 8.5, 5.5, 16) * CFrame.Angles(0.35, 0, s * 0.25), dark, M,
+			{ Name = "Deriva" })
+		part(Vector3.new(0.3, 0.5, 5), CFrame.new(s * 8.8, 8.9, 18.2) * CFrame.Angles(0.35, 0, s * 0.25), C.Gold,
+			Enum.Material.Neon, { Name = "DetalheDourado" })
 	end
-	part(Vector3.new(0.6, 34, 34), CFrame.new(0, -6.2, 0) * VERT, C.Cyan, Enum.Material.Neon,
-		{ Shape = Enum.PartType.Cylinder, Transparency = 0.3, Name = "AnelLevitacao" })
-	local ramp = part(Vector3.new(8, 0.6, 16), CFrame.new(0, -1.3, 28) * CFrame.Angles(0.49, 0, 0), C.Metal,
-		Enum.Material.Metal, { Name = "Rampa" })
-	m.PrimaryPart = hull
+	part(Vector3.new(0.5, 30, 30), CFrame.new(0, -8.4, 1) * VERT, C.Cyan, Enum.Material.Neon,
+		{ Shape = CYL, Transparency = 0.45, Name = "AnelLevitacao" })
+	local ramp = part(Vector3.new(8, 0.6, 23), CFrame.new(0, -2.6, 26) * CFrame.Angles(0.495, 0, 0), C.Metal, M,
+		{ Name = "Rampa" })
+	m.WorldPivot = cf
 	m.Parent = workspace
 	return m, ramp
 end
@@ -1844,7 +1775,7 @@ local function travel()
 	local ok, err = pcall(function()
 		-- 1) transicao e criacao da nave perto do jogador
 		fadeTo(0, 0.45)
-		local pos0 = Vector3.new(PORTAL_POS.X + 38, portalGroundY + 5, PORTAL_POS.Z)
+		local pos0 = Vector3.new(PORTAL_POS.X + 38, portalGroundY + 8.6, PORTAL_POS.Z)
 		local flat = Vector3.new(DEST.X - pos0.X, 0, DEST.Z - pos0.Z)
 		local heading = flat.Unit
 		shipCF = CFrame.lookAt(pos0, pos0 + heading)
@@ -1874,31 +1805,54 @@ local function travel()
 		ramp.Transparency = 1
 		say("Decolando...", 2.2)
 
-		-- 3) decolagem suave
-		local p1 = pos0 + Vector3.new(0, 95, 0) + heading * 70
-		animate(3.4, function(s)
-			local pos = pos0:Lerp(p1, smooth(s))
-			shipCF = CFrame.lookAt(pos, pos + heading + Vector3.new(0, 0.18 * math.sin(s * PI), 0))
+		-- 3) decolagem curta: a nave ergue um pouco, sem subir direto
+		local headRot = CFrame.lookAt(Vector3.zero, heading)
+		local function shipAt(pos, pitch, roll)
+			return CFrame.new(pos) * headRot * CFrame.Angles(pitch, 0, roll or 0)
+		end
+		local function camAt(pos, x, y, z)
+			return CFrame.lookAt(pos + headRot:VectorToWorldSpace(Vector3.new(x, y, z)), pos)
+		end
+		local lift = pos0 + Vector3.new(0, 14, 0)
+		animate(1.8, function(s)
+			local pos = pos0:Lerp(lift, smooth(s))
+			shipCF = shipAt(pos, 0.04 * s)
 			ship:PivotTo(shipCF)
-			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(-34 + 20 * s, 14 + 10 * s, 62)).Position, pos)
+			cam.CFrame = camAt(pos, -34, 12, 56)
 		end)
 
-		-- 4) voo ate Wakanda
-		local p2 = DEST + Vector3.new(0, 230, 0)
-		local dist = (p2 - p1).Magnitude
-		local dur = math.clamp(dist / 620, 6, 11)
+		-- 4) sai em frente em voo baixo, acelerando
+		say("Seguindo em frente...", 2.6)
+		local pB = lift + heading * 260
+		animate(4.2, function(s)
+			local pos = lift:Lerp(pB, s * s)
+			shipCF = shipAt(pos, 0.04, 0)
+			ship:PivotTo(shipCF)
+			cam.CFrame = camAt(pos, -34 + 40 * s, 12 + 8 * s, 60 + 22 * s)
+			cam.FieldOfView = 70 + 14 * s
+		end)
+
+		-- 5) curva e sobe ate as nuvens que ficam sob Wakanda
+		local pEnd = DEST + Vector3.new(0, -160, 0)
+		local ctl = Vector3.new(pEnd.X, pB.Y + 40, pEnd.Z)
+		local function bez(s)
+			local a = 1 - s
+			return pB * (a * a) + ctl * (2 * a * s) + pEnd * (s * s)
+		end
+		local dur = math.clamp((pEnd - pB).Magnitude / 1100, 8, 16)
 		clouds = Instance.new("Folder")
 		clouds.Name = "NuvensViagem"
 		clouds.Parent = workspace
-		local function pathPos(s)
-			return p1:Lerp(p2, smooth(s)) + Vector3.new(0, 260 * math.sin(PI * s), 0)
+		for i = 1, 26 do
+			local a = rng:NextNumber(0, 2 * PI)
+			local r = rng:NextNumber(130, 320)
+			createCloud(clouds, bez(i / 27) + Vector3.new(math.cos(a) * r, rng:NextNumber(-60, 60), math.sin(a) * r))
 		end
-		for i = 1, 16 do
-			local s = i / 17
-			local c = pathPos(s)
-			local side = (i % 2 == 0) and 1 or -1
-			createCloud(clouds, c + Vector3.new(heading.Z * side * rng:NextNumber(110, 300), rng:NextNumber(-70, 70),
-				-heading.X * side * rng:NextNumber(110, 300)))
+		for k = 1, 6 do
+			local a = k / 6 * 2 * PI
+			sp(clouds, Vector3.new(420, 120, 420), CFrame.new(pEnd + Vector3.new(math.cos(a) * 160, rng:NextNumber(-40, 60),
+				math.sin(a) * 160)), Color3.fromRGB(248, 250, 255), Enum.Material.SmoothPlastic,
+				{ Shape = Enum.PartType.Ball, Transparency = 0.25, Name = "NuvemCobertura" })
 		end
 		local wind = sp(ship, Vector3.new(220, 120, 220), shipCF, C.Foam, Enum.Material.SmoothPlastic,
 			{ Transparency = 1, Name = "Vento" })
@@ -1911,53 +1865,62 @@ local function travel()
 		we.LightEmission = 1
 		we.LockedToPart = false
 		we.Transparency = NumberSequence.new(0.3, 1)
-		we.Color = ColorSequence.new(C.VibLight, C.Cyan)
+		we.Color = ColorSequence.new(C.Foam, C.Cyan)
 		we.Parent = wind
-		say("A caminho de Wakanda...", 3)
-		animate(dur, function(s)
-			local pos = pathPos(s)
-			local a, b = pathPos(math.max(s - 0.015, 0)), pathPos(math.min(s + 0.015, 1))
-			local dh = Vector3.new(b.X - a.X, 0, b.Z - a.Z).Magnitude
-			local slope = math.clamp((b.Y - a.Y) / math.max(dh, 1), -0.4, 0.4)
-			local fwd = (heading + Vector3.new(0, slope, 0)).Unit
-			shipCF = CFrame.lookAt(pos, pos + fwd) * CFrame.Angles(0, 0, math.sin(s * PI * 2) * 0.12)
+		say("Subindo ate Wakanda...", 3)
+		local lastPitch = 0
+		animate(dur, function(u)
+			local s = 1 - (1 - u) ^ 1.6
+			local a = 1 - s
+			local pos = bez(s)
+			local tan = (ctl - pB) * (2 * a) + (pEnd - ctl) * (2 * s)
+			local dh = Vector3.new(tan.X, 0, tan.Z).Magnitude
+			lastPitch = math.atan2(tan.Y, math.max(dh, 0.001))
+			shipCF = shipAt(pos, lastPitch, math.sin(u * PI * 3) * 0.08)
 			ship:PivotTo(shipCF)
 			wind.CFrame = CFrame.new(pos)
-			local sweep = -58 + 116 * smooth(s)
-			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(sweep, 18, 78)).Position, pos)
-			cam.FieldOfView = 70 + 32 * math.sin(PI * s)
+			cam.CFrame = camAt(pos, -60 + 120 * smooth(u), 18, 85)
+			cam.FieldOfView = 70 + 30 * math.sin(PI * u)
 		end)
 		wind:Destroy()
-		if clouds then
-			clouds:Destroy()
-			clouds = nil
-		end
 
-		-- 5) aproximacao e pouso
+		-- 6) atravessa as nuvens (flash branco) e chega por cima de Wakanda
+		ui.fade.BackgroundColor3 = Color3.new(1, 1, 1)
+		fadeTo(0, 0.6)
+		clouds:Destroy()
+		clouds = nil
+		local p2 = DEST + Vector3.new(0, 330, 0)
+		shipCF = shipAt(p2, -0.2, 0)
+		ship:PivotTo(shipCF)
+		cam.CFrame = camAt(p2, -40, 24, 82)
+		cam.FieldOfView = 78
+		task.wait(0.15)
+		fadeTo(1, 0.8)
+		ui.fade.BackgroundColor3 = Color3.new(0, 0, 0)
 		say("Chegando em Wakanda...", 3)
-		local p3 = DEST + Vector3.new(0, 16, 0)
-		animate(3.8, function(s)
+		local p3 = DEST + Vector3.new(0, 26, 0)
+		animate(4.6, function(s)
 			local pos = p2:Lerp(p3, easeOut(s))
-			shipCF = CFrame.lookAt(pos, pos + heading + Vector3.new(0, -0.3 * (1 - s), 0))
+			shipCF = shipAt(pos, -0.2 * (1 - s), 0)
 			ship:PivotTo(shipCF)
-			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(-30, 22 + 8 * (1 - s), 70)).Position, pos)
+			cam.CFrame = camAt(pos, -34, 22 + 10 * (1 - s), 78)
 			cam.FieldOfView = 70 + 8 * (1 - s)
 		end)
-		local landPos = DEST + Vector3.new(0, 5.2, 0)
-		animate(1.6, function(s)
+		local landPos = DEST + Vector3.new(0, 8.6, 0)
+		animate(1.8, function(s)
 			local pos = p3:Lerp(landPos, smooth(s))
-			shipCF = CFrame.lookAt(pos, pos + heading)
+			shipCF = shipAt(pos, 0, 0)
 			ship:PivotTo(shipCF)
-			cam.CFrame = CFrame.lookAt((shipCF * CFrame.new(-30, 20, 64)).Position, pos)
+			cam.CFrame = camAt(pos, -30, 20, 66)
 		end)
 		ramp.Transparency = 0
 
-		-- 6) o jogador desce da nave
+		-- 7) o jogador desce da nave
 		if follow then
 			follow:Disconnect()
 			follow = nil
 		end
-		local out = shipCF:PointToWorldSpace(Vector3.new(0, 0, 36))
+		local out = shipCF:PointToWorldSpace(Vector3.new(0, 0, 40))
 		out = Vector3.new(out.X, DEST.Y + 3.4, out.Z)
 		local outCF = CFrame.lookAt(out, Vector3.new(CENTER.X, out.Y, CENTER.Z))
 		local fromCF = root.CFrame
@@ -2158,6 +2121,16 @@ local function createWakanda()
 			end
 		end
 		cyl(F.Terreno, 0.3, 1240, V(0, 0.15, 0), C.City, Enum.Material.Concrete, { Name = "BaseCidade" })
+	end)
+
+	run("nuvens", function()
+		local cl = folder(root, "NuvensAbaixo")
+		for _ = 1, 40 do
+			local s = rng:NextNumber(300, 600)
+			make(cl, V(s, s * 0.22, s), V(rng:NextNumber(-2200, 2200), -rng:NextNumber(70, 240), rng:NextNumber(-3000, 2300)),
+				Color3.fromRGB(248, 250, 255), Enum.Material.SmoothPlastic,
+				{ Shape = Enum.PartType.Ball, Transparency = 0.35, CanCollide = false, Name = "NuvemAbaixo" })
+		end
 	end)
 
 	run("estradas", function()
